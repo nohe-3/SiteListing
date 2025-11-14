@@ -1,38 +1,42 @@
-# rammerhead
+# Shadow-Browser
+A creative method to pass firewalls
 
-> proxy based on testcafe-hammerhead (password is `sharkie4life`)
+## Introduction
+Conventionally we use VPN or proxy server to bypass firewalls and log in websites we couldn't log in. The idea of shadow_browser is to create a browser on the server and users can connect to the browser with a webpage version of VNC called [noVNC](http://novnc.com) and use the online browser to surf the Internet.
 
-Demo link: https://demo-opensource.rammerhead.org
+## Server
 
-Polished closed-source-for-now browser version: https://browser.rammerhead.org (more links by awesome community members in the discord server at the end of readme)
+### Requirement
+* docker-cm
+* docker-compose
 
+### Configuration
+1. Open `docker-compose.yml`
+2. Goto ***Line 21***
+3. Change
+```
+  -HOSTNAME = 127.0.0.1
+```
+into
+```
+  -HOSTNAME = your server's ip address or domain
+```
+4. Do the same thing for `env.env`
+5. Make sure your server's ports from `5950` to `6000` and port `80` are not occupied
+6. Open a terminal and type
+```
+shadow_browser # service docker start
+shadow_browser # docker-compose up
+```
 
-## Supporting me and contributing
+## Usage
+1. Open your browser on your computer
+2. Enter you server's ip address or domain
+3. Follow the instructions on the webpage
+4. Enjoy yourself
 
-Server infrastructure costs money and developing this project consumes a lot of my time, so I would appreciate it greatly if you become a Patreon member: https://www.patreon.com/rammerhead
+## Remain issue
+Sound will not be transmitted by server. When you play a video on shadow-browser, you won't hear anything.
 
-
-## Who is this package for
-
-Package is for those who want a fully-configurable proxy that works on many sites
-
-## Effectiveness of proxy
-
-This proxy supports proxying
-- basically everything except google logins
-
-## Features of proxy
-
-The proxy allows users to create a "session". When they access their session, their localStorage and cookies will be synced with rammerhead. This allows for accurately mocking cookied requests and conveniently save their logins even if they switch devices. This also enables users to configure a custom HTTP proxy server for rammerhead to connect to for the session.
-
-## Installing and running
-
-Rammerhead recommends you to have at least **node v16** to be installed. Once you installed nodejs, clone the repo, then run `npm install` and `npm run build`.
-
-After, configure your settings in [src/config.js](src/config.js). If you wish to consistently pull updates from this repo without the hassle of merging, create `config.js` in the root folder so they override the configs in `src/`.
-
-Finally run the following to start rammerhead: `node src/server.js`
-
-## Discord server
-
-For any user-help non-issue related questions, especially pertaining to Rammerhead Browser, please ask them here: [Rammerhead Support Server](https://discord.gg/VNT4E7gN5Y).
+## Demo
+[shadow-browser](http://103.115.49.177)
