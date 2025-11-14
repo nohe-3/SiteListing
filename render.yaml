@@ -1,6 +1,5 @@
- services:
+services:
   - type: web
-    name: educational-website
-    env: node
+    name: edu
+    env: docker
     plan: free
-    startCommand: npm install && npm build && node server.js
