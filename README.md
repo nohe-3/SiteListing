@@ -1,26 +1,38 @@
-# Shuttle V3
-### Shittle V3 bext proxy ever 🔥🔥🔥
+# rammerhead
 
-[![Deploy to Render](https://binbashbanana.github.io/deploy-buttons/buttons/remade/render.svg)](https://github.com/shuttlenetwork/shuttle/wiki#how-to-deploy-to-onrender)
-[![Deploy to Cyclic](https://binbashbanana.github.io/deploy-buttons/buttons/remade/cyclic.svg)](https://app.cyclic.sh/api/app/deploy/shuttlenetwork/shuttle)
-[![Remix on Glitch](https://raw.githubusercontent.com/BinBashBanana/deploy-buttons/master/buttons/remade/glitch.svg)](https://glitch.com/edit/#!/import/github/shuttlenetwork/shuttle)
-[![Deploy to Heroku](https://raw.githubusercontent.com/BinBashBanana/deploy-buttons/master/buttons/remade/heroku.svg)](https://heroku.com/deploy/?template=https://github.com/shuttlenetwork/shuttle)
-[![Deploy to Azure](https://raw.githubusercontent.com/BinBashBanana/deploy-buttons/master/buttons/remade/azure.svg)](https://deploy.azure.com/?repository=https://github.com/shuttlenetwork/shuttle)
-[![Deploy to IBM Cloud](https://raw.githubusercontent.com/BinBashBanana/deploy-buttons/master/buttons/remade/ibmcloud.svg)](https://cloud.ibm.com/devops/setup/deploy?repository=https://github.com/shuttlenetwork/shuttle)
-[![Deploy to Amplify Console](https://raw.githubusercontent.com/BinBashBanana/deploy-buttons/master/buttons/remade/amplifyconsole.svg)](https://console.aws.amazon.com/amplify/home#/deploy?repo=https://github.com/shuttlenetwork/shuttle)
-[![Run on Google Cloud](https://raw.githubusercontent.com/BinBashBanana/deploy-buttons/master/buttons/remade/googlecloud.svg)](https://deploy.cloud.run/?git_repo=https://github.com/shuttlenetwork/shuttle)
+> proxy based on testcafe-hammerhead (password is `sharkie4life`)
 
-## Discord Server
+Demo link: https://demo-opensource.rammerhead.org
 
-[![Join us on Discord](https://invidget.switchblade.xyz/E57EpN2CHh)](https://discord.gg/E57EpN2CHh)
+Polished closed-source-for-now browser version: https://browser.rammerhead.org (more links by awesome community members in the discord server at the end of readme)
 
-## Setup
 
-```sh
-git clone https://github.com/shuttlenetwork/shuttle.git
-cd shuttle
-npm install
-npm start
-```
-## Info 
-- If you are running this site on replit or other hosting platform that bans proxies, use [Shuttle Lite](https://github.com/shuttlenetwork/shuttle-lite)
+## Supporting me and contributing
+
+Server infrastructure costs money and developing this project consumes a lot of my time, so I would appreciate it greatly if you become a Patreon member: https://www.patreon.com/rammerhead
+
+
+## Who is this package for
+
+Package is for those who want a fully-configurable proxy that works on many sites
+
+## Effectiveness of proxy
+
+This proxy supports proxying
+- basically everything except google logins
+
+## Features of proxy
+
+The proxy allows users to create a "session". When they access their session, their localStorage and cookies will be synced with rammerhead. This allows for accurately mocking cookied requests and conveniently save their logins even if they switch devices. This also enables users to configure a custom HTTP proxy server for rammerhead to connect to for the session.
+
+## Installing and running
+
+Rammerhead recommends you to have at least **node v16** to be installed. Once you installed nodejs, clone the repo, then run `npm install` and `npm run build`.
+
+After, configure your settings in [src/config.js](src/config.js). If you wish to consistently pull updates from this repo without the hassle of merging, create `config.js` in the root folder so they override the configs in `src/`.
+
+Finally run the following to start rammerhead: `node src/server.js`
+
+## Discord server
+
+For any user-help non-issue related questions, especially pertaining to Rammerhead Browser, please ask them here: [Rammerhead Support Server](https://discord.gg/VNT4E7gN5Y).
