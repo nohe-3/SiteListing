@@ -1,32 +1,30 @@
 {
-  "name": "interstellar",
-  "version": "5.2.5",
+  "name": "shuttle",
+  "version": "3.0.0",
+  "description": "Experience the global internet using Shuttle, the swiftest and most uncluttered proxy solution. Relish a heightened level of privacy during your online sessions, free from censorship.",
   "type": "module",
-  "engines": {
-    "npm": ">=7.0.0",
-    "node": ">=16.0.0"
-  },
   "scripts": {
-    "start": "node index.js",
-    "format": "pnpm biome format --write .",
-    "precommit": "pnpm run format && pnpm biome check --write .",
-    "lint": "biome lint --write ."
+    "start": "node index.js"
   },
-  "author": "InterstellarNetwork",
-  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shuttlenetwork/shuttle"
+  },
+  "keywords": [
+    "proxy"
+  ],
+  "author": "",
+  "license": " GPL-3.0-or-later",
+  "homepage": "https://shuttleproxy.com",
   "dependencies": {
-    "@nebula-services/bare-server-node": "^2.0.4",
-    "chalk": "^5.4.1",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.0",
-    "express": "^4.21.2",
-    "express-basic-auth": "^1.2.1",
-    "mime": "^4.1.0",
-    "node-fetch": "^3.3.2"
+    "@nebula-services/dynamic": "^0.7.2-patch.2",
+    "@titaniumnetwork-dev/ultraviolet": "^2.0.0",
+    "@tomphttp/bare-server-node": "^2.0.1",
+    "ejs": "^3.1.9",
+    "express": "^4.18.1",
+    "yarn": "^1.22.22"
   },
-  "devDependencies": {
-    "@biomejs/biome": "2.2.2"
-  },
-  "packageManager": "pnpm@9.10.0"
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
