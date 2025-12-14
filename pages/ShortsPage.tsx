@@ -1,0 +1,439 @@
+
+
+
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import ShortsPlayer from '../components/ShortsPlayer';
+import { getPlayerConfig, getComments, parseDuration, getChannelShorts, getVideoDetails } from '../utils/api';
+import { getXraiShorts } from '../utils/recommendation';
+import type { Video, Comment } from '../types';
+import { useSubscription } from '../contexts/SubscriptionContext';
+import { useSearchHistory } from '../contexts/SearchHistoryContext';
+import { useHistory } from '../contexts/HistoryContext';
+import { usePreference } from '../contexts/PreferenceContext';
+import { LikeIcon, CommentIcon, CloseIcon, BlockIcon, TrashIcon } from '../components/icons/Icons';
+import CommentComponent from '../components/Comment';
+import { useTheme } from '../hooks/useTheme';
+
+// Re-created Chevron Icons - Increased size (approx 1.7x) and bolder design
+const ChevronUpIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="fill-current text-white w-10 h-10 md:w-12 md:h-12 drop-shadow-lg">
+        <path d="M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z"/>
+    </svg>
+);
+
+const ChevronDownIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="fill-current text-white w-10 h-10 md:w-12 md:h-12 drop-shadow-lg">
+        <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+    </svg>
+);
+
+const ShortsPage: React.FC = () => {
+    const params = useParams();
+    // Handle both /shorts/:videoId and /shorts/* patterns
+    const videoId = params.videoId || params['*']; 
+    
+    const location = useLocation();
+    const navigate = useNavigate();
+    const context = location.state?.context as { type: 'channel' | 'home' | 'search', channelId?: string } | undefined;
+
+    const [videos, setVideos] = useState<Video[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isFetchingMore, setIsFetchingMore] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [playerParams, setPlayerParams] = useState<string | null>(null);
+    const [showComments, setShowComments] = useState(false);
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [areCommentsLoading, setAreCommentsLoading] = useState(false);
+
+    const { theme } = useTheme();
+    const { subscribedChannels } = useSubscription();
+    const { searchHistory } = useSearchHistory();
+    const { history: watchHistory, shortsHistory, addShortToHistory } = useHistory();
+    const { ngKeywords, ngChannels, hiddenVideos, negativeKeywords, addHiddenVideo, addNgChannel, isShortsAutoplayEnabled } = usePreference();
+    
+    const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const iframeRefs = useRef<Map<string, HTMLIFrameElement>>(new Map());
+    
+    const seenVideoIdsRef = useRef<Set<string>>(new Set());
+
+    const sendCommand = (iframe: HTMLIFrameElement, command: 'playVideo' | 'pauseVideo') => {
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(
+                JSON.stringify({ event: 'command', func: command, args: [] }),
+                '*'
+            );
+        }
+    };
+
+    // Play/Pause Control based on current index and autoplay setting
+    useEffect(() => {
+        const currentVideo = videos[currentIndex];
+        if (!currentVideo) return;
+
+        // First, pause all other videos to prevent audio overlap
+        iframeRefs.current.forEach((iframe, id) => {
+            if (id !== currentVideo.id) {
+                sendCommand(iframe, 'pauseVideo');
+            }
+        });
+
+        // Then play the current one if autoplay is enabled (for desktop/initial load)
+        const currentIframe = iframeRefs.current.get(currentVideo.id);
+        if (currentIframe && isShortsAutoplayEnabled) {
+            sendCommand(currentIframe, 'playVideo');
+        }
+    }, [currentIndex, videos, isShortsAutoplayEnabled]);
+
+    // URL Sync: Handle browser back/forward or external navigation
+    useEffect(() => {
+        if (videoId && videos.length > 0) {
+            const index = videos.findIndex(v => v.id === videoId);
+            if (index !== -1 && index !== currentIndex) {
+                setCurrentIndex(index);
+            }
+        }
+    }, [videoId, videos]); // Do not include currentIndex to prevent loops
+
+    const fetchMoreShorts = useCallback(async () => {
+        if (isFetchingMore) return;
+        setIsFetchingMore(true);
+        try {
+            if (!context || context.type !== 'channel') {
+                const currentSeenIds = Array.from(seenVideoIdsRef.current) as string[];
+                
+                const shorts = await getXraiShorts({ 
+                    searchHistory, watchHistory, shortsHistory, subscribedChannels, 
+                    ngKeywords, ngChannels, hiddenVideos, negativeKeywords, 
+                    page: Math.floor(videos.length / 30) + 1, 
+                    seenIds: currentSeenIds
+                });
+                
+                setVideos(prev => {
+                    const existingIds = new Set(prev.map(v => v.id));
+                    const newUniqueShorts = shorts.filter(s => !existingIds.has(s.id));
+                    newUniqueShorts.forEach(s => seenVideoIdsRef.current.add(s.id));
+                    return [...prev, ...newUniqueShorts];
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsFetchingMore(false);
+        }
+    }, [isFetchingMore, context, videos.length, searchHistory, watchHistory, shortsHistory, subscribedChannels, ngKeywords, ngChannels, hiddenVideos, negativeKeywords]);
+
+    // Initial Data Fetch Logic
+    useEffect(() => {
+        const init = async () => {
+            // If we already have videos and the current video is in the list, don't re-init.
+            // This prevents "blue spinner" when App.tsx keeps component alive but logic re-runs.
+            if (videos.length > 0) {
+                if (videoId && videos.some(v => v.id === videoId)) {
+                    return;
+                }
+            }
+
+            setIsLoading(true);
+            setError(null);
+            
+            try {
+                const params = await getPlayerConfig();
+                setPlayerParams(params);
+
+                if (context?.type === 'channel' && context.channelId) {
+                    const { videos: channelShorts } = await getChannelShorts(context.channelId);
+                    
+                    let initialIndex = 0;
+                    if (videoId) {
+                        const idx = channelShorts.findIndex(v => v.id === videoId);
+                        if (idx !== -1) {
+                            initialIndex = idx;
+                        } else {
+                            try {
+                                const detail = await getVideoDetails(videoId);
+                                channelShorts.unshift(detail);
+                                initialIndex = 0;
+                            } catch (e) {
+                                console.warn("Could not fetch detail for initial video", e);
+                            }
+                        }
+                    }
+                    
+                    seenVideoIdsRef.current = new Set(channelShorts.map(v => v.id));
+                    setVideos(channelShorts);
+                    setCurrentIndex(initialIndex);
+                } 
+                else {
+                    const shorts = await getXraiShorts({ 
+                        searchHistory, watchHistory, shortsHistory, subscribedChannels, 
+                        ngKeywords, ngChannels, hiddenVideos, negativeKeywords, 
+                        page: 1,
+                        seenIds: []
+                    });
+
+                    let initialList = shorts;
+                    if (videoId) {
+                        const existingIdx = shorts.findIndex(v => v.id === videoId);
+                        if (existingIdx !== -1) {
+                            const [target] = shorts.splice(existingIdx, 1);
+                            initialList = [target, ...shorts];
+                        } else {
+                            try {
+                                const detail = await getVideoDetails(videoId);
+                                initialList = [detail, ...shorts];
+                            } catch (e) {
+                                console.warn("Could not fetch detail for requested video", e);
+                            }
+                        }
+                    }
+                    
+                    if (initialList.length === 0) setError("ショート動画が見つかりませんでした。");
+                    else {
+                        seenVideoIdsRef.current = new Set(initialList.map(v => v.id));
+                        setVideos(initialList);
+                    }
+                    setCurrentIndex(0);
+                }
+            } catch (err: any) {
+                setError(err.message || 'ショート動画の読み込みに失敗しました。');
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        // Only run init if we strictly need to (empty list or new context)
+        if (videos.length === 0) {
+            init();
+        }
+    }, [videoId, context]); // Keep dependency minimal to avoid loops
+
+    // --- Pre-fetching Logic ---
+    useEffect(() => {
+        if (videos.length > 0 && context?.type !== 'channel') {
+            const remainingVideos = videos.length - 1 - currentIndex;
+            // Buffer: 15 items
+            if (remainingVideos < 15 && !isFetchingMore && !isLoading) {
+                fetchMoreShorts();
+            }
+        }
+    }, [currentIndex, videos.length, isFetchingMore, isLoading, context, fetchMoreShorts]);
+
+    // Update URL on Swipe/Navigation
+    useEffect(() => {
+        if (videos[currentIndex] && videos[currentIndex].id !== videoId) {
+            navigate(`/shorts/${videos[currentIndex].id}`, { replace: true, state: location.state });
+        }
+    }, [currentIndex, videos, navigate, videoId, location.state]);
+
+    const handleNext = useCallback(() => {
+        const nextIndex = currentIndex + 1;
+        if (nextIndex < videos.length) {
+            const nextVideo = videos[nextIndex];
+            if (nextVideo) {
+                const nextIframe = iframeRefs.current.get(nextVideo.id);
+                if (nextIframe) {
+                    // Force play on user gesture to bypass iOS restrictions
+                    sendCommand(nextIframe, 'playVideo');
+                }
+            }
+            setCurrentIndex(nextIndex);
+        }
+    }, [currentIndex, videos]);
+
+    const handlePrev = useCallback(() => {
+        const prevIndex = currentIndex - 1;
+        if (prevIndex >= 0) {
+            const prevVideo = videos[prevIndex];
+            if (prevVideo) {
+                const prevIframe = iframeRefs.current.get(prevVideo.id);
+                if (prevIframe) {
+                    // Force play on user gesture to bypass iOS restrictions
+                    sendCommand(prevIframe, 'playVideo');
+                }
+            }
+            setCurrentIndex(prevIndex);
+        }
+    }, [currentIndex, videos]);
+    
+    // Reset comments when index changes
+    useEffect(() => {
+        setShowComments(false);
+        setComments([]);
+    }, [currentIndex]);
+    
+    const getParamsForVideo = (index: number, videoId: string) => {
+        if (!playerParams) return '';
+        let params = playerParams.replace(/&?autoplay=[01]/g, "") + "&playsinline=1&autoplay=0&enablejsapi=1";
+        params += `&loop=1&playlist=${videoId}`;
+        return params;
+    };
+
+    // History saving
+    useEffect(() => {
+        const video = videos[currentIndex];
+        if (!video) return;
+        const durationSec = parseDuration(video.isoDuration, video.duration);
+        const timeoutMs = durationSec > 0 ? (durationSec * 1000) / 2 : 10000;
+        const historyTimer = setTimeout(() => {
+            addShortToHistory(video);
+        }, timeoutMs);
+        return () => clearTimeout(historyTimer);
+    }, [currentIndex, videos, addShortToHistory]);
+    
+    const handleToggleComments = async () => {
+        const willBeOpen = !showComments;
+        setShowComments(willBeOpen);
+        if (willBeOpen && comments.length === 0 && videos[currentIndex]) {
+            setAreCommentsLoading(true);
+            try {
+                const data = await getComments(videos[currentIndex].id);
+                setComments(data);
+            } catch (e) { console.error("Failed to fetch comments", e); } 
+            finally { setAreCommentsLoading(false); }
+        }
+    };
+    
+    const handleNotInterested = () => {
+        const video = videos[currentIndex];
+        if(!video) return;
+        addHiddenVideo({ id: video.id, title: video.title, channelName: video.channelName });
+        handleNext();
+    };
+
+    const handleBlockChannel = () => {
+        const video = videos[currentIndex];
+        if(!video) return;
+        addNgChannel({ id: video.channelId, name: video.channelName, avatarUrl: video.channelAvatarUrl });
+        handleNext();
+    };
+
+    useEffect(() => {
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            if (wheelTimeoutRef.current) return;
+            if (e.deltaY > 5) handleNext();
+            else if (e.deltaY < -5) handlePrev();
+            wheelTimeoutRef.current = setTimeout(() => { wheelTimeoutRef.current = null; }, 200);
+        };
+        const container = document.querySelector('.shorts-container');
+        if(container) container.addEventListener('wheel', handleWheel, { passive: false });
+        return () => { 
+            if(container) container.removeEventListener('wheel', handleWheel);
+            if(wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+        };
+    }, [handleNext, handlePrev]);
+
+    if (isLoading && videos.length === 0) return <div className="flex justify-center items-center h-[calc(100vh-64px)]"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-yt-blue"></div></div>;
+    if (error) return <div className="text-center text-red-500 bg-red-100 dark:bg-red-900/50 p-4 rounded-lg m-4">{error}</div>;
+    if (videos.length === 0 || !playerParams) return <div className="text-center p-8">No shorts found.</div>;
+
+    return (
+        <div className={`shorts-container flex justify-center items-center h-[calc(100vh-3.5rem)] w-full overflow-hidden relative ${theme.includes('glass') ? 'bg-transparent' : 'bg-yt-white dark:bg-yt-black'}`}>
+            <div className="relative flex items-center justify-center gap-4 h-full w-full max-w-7xl mx-auto px-2 sm:px-4">
+                
+                {/* Previous Button */}
+                <button
+                    onClick={handlePrev}
+                    disabled={currentIndex === 0}
+                    className={`absolute left-2 md:left-4 lg:left-8 top-1/2 -translate-y-1/2 z-30 p-4 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all shadow-xl border border-white/10 hidden md:flex items-center justify-center group ${currentIndex === 0 ? 'opacity-0 cursor-not-allowed' : 'opacity-80 hover:opacity-100 hover:scale-110 active:scale-95'}`}
+                    aria-label="前の動画"
+                >
+                    <ChevronUpIcon />
+                </button>
+
+                {/* Main Player Container - Renders list but hides non-active */}
+                <div className="relative h-[85vh] max-h-[900px] aspect-[9/16] rounded-2xl shadow-2xl overflow-hidden bg-black flex-shrink-0 z-10">
+                     {videos.map((video, index) => {
+                         // Unmount if too far away to save memory
+                         // Keep Current, Next 10. Unmount previous videos immediately to stop audio.
+                         if (index < currentIndex || index > currentIndex + 10) return null;
+                         
+                         const isActive = index === currentIndex;
+                         
+                         return (
+                             <div 
+                                key={video.id} 
+                                className="absolute inset-0 w-full h-full"
+                                style={{ 
+                                    visibility: isActive ? 'visible' : 'hidden',
+                                    zIndex: isActive ? 2 : 1, // Active on top
+                                }}
+                             >
+                                 <ShortsPlayer 
+                                    ref={(el) => {
+                                        if (el) iframeRefs.current.set(video.id, el);
+                                        else iframeRefs.current.delete(video.id);
+                                    }}
+                                    id={video.id}
+                                    video={video} 
+                                    playerParams={getParamsForVideo(index, video.id)} 
+                                    context={context}
+                                    onLoad={(e) => {
+                                        const iframe = e.currentTarget;
+                                        if (index === currentIndex && isShortsAutoplayEnabled) {
+                                            sendCommand(iframe, 'playVideo');
+                                        } else {
+                                            // Explicitly pause if preloading in background
+                                            sendCommand(iframe, 'pauseVideo');
+                                        }
+                                    }}
+                                 />
+                             </div>
+                         );
+                     })}
+                </div>
+
+                {/* Right Side Controls */}
+                <div className="flex flex-col gap-5 z-10 absolute right-4 bottom-20 md:static md:bottom-auto">
+                    <div className="flex flex-col gap-3">
+                        <button onClick={() => {}} className="flex flex-col items-center p-3 rounded-full bg-yt-light/50 dark:bg-yt-light-black/50 hover:bg-yt-light dark:hover:bg-yt-light-black backdrop-blur-sm transition-all group">
+                            <LikeIcon /><span className="text-xs font-semibold text-black dark:text-white mt-1 hidden md:block">高評価</span>
+                        </button>
+                        <button onClick={handleToggleComments} className={`flex flex-col items-center p-3 rounded-full bg-yt-light/50 dark:bg-yt-light-black/50 hover:bg-yt-light dark:hover:bg-yt-light-black backdrop-blur-sm transition-all group ${showComments ? 'bg-white text-black hover:bg-white/90' : ''}`}>
+                            <CommentIcon /><span className="text-xs font-semibold text-black dark:text-white mt-1 hidden md:block">コメント</span>
+                        </button>
+                        <button onClick={handleNotInterested} className="flex flex-col items-center p-3 rounded-full bg-yt-light/50 dark:bg-yt-light-black/50 hover:bg-yt-light dark:hover:bg-yt-light-black backdrop-blur-sm transition-all group">
+                            <TrashIcon /><span className="text-xs font-semibold text-black dark:text-white mt-1 hidden md:block">興味なし</span>
+                        </button>
+                        <button onClick={handleBlockChannel} className="flex flex-col items-center p-3 rounded-full bg-yt-light/50 dark:bg-yt-light-black/50 hover:bg-yt-light dark:hover:bg-yt-light-black backdrop-blur-sm transition-all group">
+                            <BlockIcon /><span className="text-xs font-semibold text-black dark:text-white mt-1 hidden md:block">非表示</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Comment Drawer */}
+                {showComments && (
+                    <div className="absolute inset-0 md:static md:w-[360px] md:h-[85vh] md:max-h-[900px] glass-panel rounded-2xl shadow-2xl flex flex-col animate-scale-in z-20 bg-white/95 dark:bg-black/95 md:bg-transparent">
+                         <div className="flex items-center justify-between p-4 border-b border-white/20">
+                             <h3 className="font-bold text-black dark:text-white">コメント {comments.length > 0 && `(${comments.length})`}</h3>
+                             <button onClick={() => setShowComments(false)} className="p-2 hover:bg-white/10 rounded-full"><CloseIcon /></button>
+                         </div>
+                         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                             {areCommentsLoading ? <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-yt-blue"></div></div>
+                             : comments.length > 0 ? (
+                                 <div className="space-y-2">
+                                     {comments.map((comment, idx) => ( <div key={idx} className="bg-black/5 dark:bg-white/5 rounded-lg p-2 backdrop-blur-sm"><CommentComponent comment={comment} /></div> ))}
+                                 </div>
+                             ) : <div className="text-center text-yt-light-gray py-10">コメントはありません</div> }
+                         </div>
+                    </div>
+                )}
+                
+                {/* Next Button */}
+                <button
+                    onClick={handleNext}
+                    disabled={currentIndex >= videos.length - 1 && !isFetchingMore}
+                    className={`absolute right-2 md:right-4 lg:right-8 top-1/2 -translate-y-1/2 z-30 p-4 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all shadow-xl border border-white/10 hidden md:flex items-center justify-center group ${currentIndex >= videos.length - 1 && !isFetchingMore ? 'opacity-0 cursor-not-allowed' : 'opacity-80 hover:opacity-100 hover:scale-110 active:scale-95'}`}
+                    title="次の動画"
+                >
+                    <ChevronDownIcon />
+                </button>
+            </div>
+        </div>
+    );
+};
+export default ShortsPage;

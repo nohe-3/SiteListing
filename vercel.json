@@ -2,14 +2,45 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.js",
+      "src": "api/stream.js",
+      "use": "@vercel/node",
+      "config": { "includeFiles": ["yt-dlp_linux"] }
+    },
+    {
+      "src": "api/index.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
   ],
   "routes": [
     {
+      "src": "/api/stream",
+      "dest": "/api/stream.js"
+    },
+    {
+      "src": "/api/thumbnail/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/api/proxy-thumbnail",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
-      "dest": "index.js"
+      "dest": "/index.html"
     }
   ]
 }

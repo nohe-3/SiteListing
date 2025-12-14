@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XeroxYT-NTv3</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'yt-white': 'hsl(0, 0%, 100%)',
+              'yt-black': '#0f0f0f',
+              'yt-light-black': '#272727',
+              'yt-light': '#f2f2f2',
+              'yt-gray': '#3f3f3f', // hover
+              'yt-dark-gray': '#272727', // consolidated component background
+              'yt-light-gray': '#aaa', // secondary text
+              'yt-red': 'hsl(0, 100%, 50%)',
+              'yt-blue': '#3ea6ff',
+              'yt-spec-10': 'rgba(255, 255, 255, 0.1)', // dark theme active/hover fills
+              'yt-spec-20': 'rgba(255, 255, 255, 0.2)', // dark border
+              'yt-spec-light-10': 'rgba(0, 0, 0, 0.05)', // light theme active/hover fills
+              'yt-spec-light-20': 'rgba(0, 0, 0, 0.1)', // light border
+            },
+            fontFamily: {
+              sans: ['Roboto', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="shortcut icon" href="/icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icon.png">
+    <script>
+      // Prevent FOUC by applying theme from localStorage before React loads
+      const theme = localStorage.getItem('theme') || 'light-glass';
+      document.documentElement.className = theme;
+    </script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            })
+            .catch(err => {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^6.25.1",
+    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "youtubei.js": "https://aistudiocdn.com/youtubei.js@^16.0.1",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
+    "dayjs": "https://aistudiocdn.com/dayjs@^1.11.19",
+    "dayjs/": "https://aistudiocdn.com/dayjs@^1.11.19/",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "child_process": "https://aistudiocdn.com/child_process@^1.0.2",
+    "process": "https://aistudiocdn.com/process@^0.11.10",
+    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
+    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.46",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "hls.js": "https://aistudiocdn.com/hls.js@^1.6.15"
+  }
+}
+</script>
+</head>
+  <body class="text-black dark:text-yt-white font-sans transition-colors duration-300">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

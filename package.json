@@ -1,32 +1,35 @@
 {
-  "name": "interstellar",
-  "version": "5.2.5",
+  "name": "xeroxyt-nt-with-youtubei",
+  "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "engines": {
-    "npm": ">=7.0.0",
-    "node": ">=16.0.0"
-  },
   "scripts": {
-    "start": "node index.js",
-    "format": "pnpm biome format --write .",
-    "precommit": "pnpm run format && pnpm biome check --write .",
-    "lint": "biome lint --write ."
+    "dev": "node api/index.js & vite --host 0.0.0.0 --port 5000",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node api/index.js",
+    "postinstall": "curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o ./yt-dlp_linux && chmod +x ./yt-dlp_linux || true"
   },
-  "author": "InterstellarNetwork",
-  "license": "GPL-3.0-or-later",
   "dependencies": {
-    "@nebula-services/bare-server-node": "^2.0.4",
-    "chalk": "^5.4.1",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.0",
-    "express": "^4.21.2",
-    "express-basic-auth": "^1.2.1",
-    "mime": "^4.1.0",
-    "node-fetch": "^3.3.2"
+    "@mlc-ai/web-llm": "^0.2.46",
+    "dayjs": "^1.11.11",
+    "express": "^5.1.0",
+    "hls.js": "^1.5.8",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^6.25.1",
+    "uuid": "^13.0.0",
+    "youtubei.js": "^9.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.2.2"
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vercel/node": "^3.2.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
   },
-  "packageManager": "pnpm@9.10.0"
+  "engines": {
+    "node": "22.x"
+  }
 }
