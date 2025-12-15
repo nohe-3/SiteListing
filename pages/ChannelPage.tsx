@@ -124,34 +124,6 @@ const ChannelPage: React.FC = () => {
     [channelId, isFetchingMore, homeData, channelDetails, shorts.length]
   );
 
-  async function getVide123(videoId2) {
-    try {
-      const res = await fetch(
-        `https://script.google.com/macros/s/AKfycbwNyrlKOhtBNC5SOQe7if_OgbzRyUOxNlHSZhEI1wq7iKEvBDhxrDplZK_sWtfJVYh6Ww/exec?stream=${encodeURIComponent(
-          videoId2
-        )}`
-      );
-
-      if (!res.ok) {
-        throw new Error(`HTTP error: ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      // {"url":"[動画.mp4]"} を想定
-      if (data && typeof data.url === 'string') {
-        return data.url;
-      }
-
-      throw new Error('url が JSON に存在しません');
-    } catch (err) {
-      console.warn('動画URL取得失敗:', err);
-      return null;
-    }
-  }
-
-  const [iframeSrc, setIframeSrc] = useState('');
-
   useEffect(() => {
     if (channelId && !isLoading) {
       if (activeTab === 'home' && !homeData) {
@@ -162,15 +134,6 @@ const ChannelPage: React.FC = () => {
         fetchTabData('shorts');
       }
     }
-    async function loadIframe() {
-      if (!homeData.topVideo.videoId) return;
-
-      const url = await getVide123(homeData.topVideo.videoId);
-      if (url) {
-        setIframeSrc(url);
-      }
-    }
-    loadIframe();
   }, [activeTab, channelId, isLoading, fetchTabData, videos.length, homeData, shorts.length]);
 
   const handleLoadMore = useCallback(() => {
@@ -255,13 +218,12 @@ const ChannelPage: React.FC = () => {
             <div className="w-full md:w-[50%] lg:w-[600px] aspect-video rounded-xl overflow-hidden flex-shrink-0 bg-yt-black shadow-xl">
               {playerParams && (
                 <iframe
+                  src={`https://www.youtubeeducation.com/embed/${homeData.topVideo.videoId}${playerParams}`}
+                  title={homeData.topVideo.title}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
                   className="w-full h-full"
-                  src={iframeSrc}
-                  frameborder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                  allowfullscreen=""
-                  referrerpolicy="strict-origin-when-cross-origin"
-                  title="動画ストリーム"
                 ></iframe>
               )}
             </div>
