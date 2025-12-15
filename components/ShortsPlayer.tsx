@@ -77,12 +77,11 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
       <iframe
         ref={ref}
         id={id}
-        className="w-full h-full"
-        data-v-162029c1=""
+        className="w-full h-full pointer-events-auto"
         src={iframeSrc}
         frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-        allowfullscreen=""
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
         onLoad={onLoad}
         referrerpolicy="strict-origin-when-cross-origin"
         title="動画ストリーム"
