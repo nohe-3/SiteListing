@@ -74,6 +74,18 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
         </button>
       )}
 
+      {/* <iframe
+        ref={ref}
+        id={id}
+        src={`https://www.youtubeeducation.com/embed/${video.id}${srcParams}`}
+        title={video.title}
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        onLoad={onLoad}
+        className="w-full h-full pointer-events-auto"
+      ></iframe> */}
+
       <iframe
         ref={ref}
         id={id}
@@ -83,7 +95,6 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         onLoad={onLoad}
-        referrerpolicy="strict-origin-when-cross-origin"
         title="動画ストリーム"
       ></iframe>
 
