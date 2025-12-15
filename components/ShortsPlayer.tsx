@@ -74,28 +74,16 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
         </button>
       )}
 
-      {/* <iframe
+      <iframe
         ref={ref}
         id={id}
-        src={`https://www.youtubeeducation.com/embed/${video.id}${srcParams}`}
-        title={video.title}
+        src={iframeSrc}
+        title="動画ストリーム"
         frameBorder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         onLoad={onLoad}
         className="w-full h-full pointer-events-auto"
-      ></iframe> */}
-
-      <iframe
-        ref={ref}
-        id={id}
-        className="w-full h-full pointer-events-auto"
-        src={iframeSrc}
-        frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        onLoad={onLoad}
-        title="動画ストリーム"
       ></iframe>
 
       {/* Overlay Info - Appears on hover or standard behavior */}
