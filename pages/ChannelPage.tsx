@@ -124,6 +124,34 @@ const ChannelPage: React.FC = () => {
     [channelId, isFetchingMore, homeData, channelDetails, shorts.length]
   );
 
+  async function getVide123(videoId2) {
+    try {
+      const res = await fetch(
+        `https://script.google.com/macros/s/AKfycbwNyrlKOhtBNC5SOQe7if_OgbzRyUOxNlHSZhEI1wq7iKEvBDhxrDplZK_sWtfJVYh6Ww/exec?stream=${encodeURIComponent(
+          videoId2
+        )}`
+      );
+
+      if (!res.ok) {
+        throw new Error(`HTTP error: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      // {"url":"[動画.mp4]"} を想定
+      if (data && typeof data.url === 'string') {
+        return data.url;
+      }
+
+      throw new Error('url が JSON に存在しません');
+    } catch (err) {
+      console.warn('動画URL取得失敗:', err);
+      return null;
+    }
+  }
+
+  const [iframeSrc, setIframeSrc] = useState('');
+
   useEffect(() => {
     if (channelId && !isLoading) {
       if (activeTab === 'home' && !homeData) {
@@ -134,6 +162,15 @@ const ChannelPage: React.FC = () => {
         fetchTabData('shorts');
       }
     }
+    async function loadIframe() {
+      if (!homeData.topVideo.videoId) return;
+
+      const url = await getVide123(homeData.topVideo.videoId);
+      if (url) {
+        setIframeSrc(url);
+      }
+    }
+    loadIframe();
   }, [activeTab, channelId, isLoading, fetchTabData, videos.length, homeData, shorts.length]);
 
   const handleLoadMore = useCallback(() => {
@@ -210,47 +247,6 @@ const ChannelPage: React.FC = () => {
         </div>
       );
     }
-
-    async function getVide123(videoId2) {
-      try {
-        const res = await fetch(
-          `https://script.google.com/macros/s/AKfycbwNyrlKOhtBNC5SOQe7if_OgbzRyUOxNlHSZhEI1wq7iKEvBDhxrDplZK_sWtfJVYh6Ww/exec?stream=${encodeURIComponent(
-            videoId2
-          )}`
-        );
-
-        if (!res.ok) {
-          throw new Error(`HTTP error: ${res.status}`);
-        }
-
-        const data = await res.json();
-
-        // {"url":"[動画.mp4]"} を想定
-        if (data && typeof data.url === 'string') {
-          return data.url;
-        }
-
-        throw new Error('url が JSON に存在しません');
-      } catch (err) {
-        console.warn('動画URL取得失敗:', err);
-        return null;
-      }
-    }
-
-    const [iframeSrc, setIframeSrc] = useState('');
-
-    useEffect(() => {
-      async function loadIframe() {
-        if (!homeData.topVideo.videoId) return;
-
-        const url = await getVide123(homeData.topVideo.videoId);
-        if (url) {
-          setIframeSrc(url);
-        }
-      }
-
-      loadIframe();
-    }, [homeData]);
 
     return (
       <div className="flex flex-col gap-6 pb-10">
