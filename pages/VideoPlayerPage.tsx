@@ -323,6 +323,8 @@ const VideoPlayerPage: React.FC = () => {
     }
   }
 
+  const [iframeSrc, setIframeSrc] = useState('');
+
   useEffect(() => {
     async function loadIframe() {
       if (!videoDetails?.id) return;
@@ -335,8 +337,6 @@ const VideoPlayerPage: React.FC = () => {
 
     loadIframe();
   }, [videoDetails]);
-
-  const [iframeSrc, setIframeSrc] = useState('');
 
   // Get 360p MP4 URL for Stream mode
   const getStreamUrl = useMemo(() => {
