@@ -96,7 +96,7 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
       <iframe
         ref={ref}
         id={id}
-        src={ensureEnableJsApiFromUrl(iframeSrc)}
+        src={normalizeYoutubeEmbedUrl(iframeSrc)}
         title="動画ストリーム"
         frameBorder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
