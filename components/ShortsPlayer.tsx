@@ -62,6 +62,25 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
     loadIframe();
   }, [video?.id]);
 
+  function normalizeYoutubeEmbedUrl(originalUrl) {
+    try {
+      const url = new URL(originalUrl);
+
+      // autoplay を削除（値が何であっても消す）
+      url.searchParams.delete('autoplay');
+
+      // enablejsapi が無ければ追加
+      if (!url.searchParams.has('enablejsapi')) {
+        url.searchParams.set('enablejsapi', '1');
+      }
+
+      return url.toString();
+    } catch (e) {
+      console.warn('URL解析失敗:', e);
+      return originalUrl;
+    }
+  }
+
   return (
     <div className="h-full w-full relative flex-shrink-0 bg-yt-black group">
       {fromChannel && (
@@ -77,7 +96,7 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
       <iframe
         ref={ref}
         id={id}
-        src={iframeSrc}
+        src={ensureEnableJsApiFromUrl(iframeSrc)}
         title="動画ストリーム"
         frameBorder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
