@@ -211,58 +211,20 @@ const ChannelPage: React.FC = () => {
       );
     }
 
-    async function getVide123(videoId: string) {
-      try {
-        const res = await fetch(`https://[URL]?stream=${encodeURIComponent(videoId)}`);
-
-        if (!res.ok) {
-          throw new Error(`HTTP error: ${res.status}`);
-        }
-
-        const data = await res.json();
-
-        // {"url":"[動画.mp4]"} を想定
-        if (data && typeof data.url === 'string') {
-          return data.url;
-        }
-
-        throw new Error('url が JSON に存在しません');
-      } catch (err) {
-        console.warn('動画URL取得失敗:', err);
-        return null;
-      }
-    }
-
-    const [iframeSrc, setIframeSrc] = useState('');
-
-    useEffect(() => {
-      async function loadIframe() {
-        if (!homeData?.topVideo?.videoId) return;
-
-        const url = await getVide123(homeData.topVideo.videoId);
-        if (url) {
-          setIframeSrc(url);
-        }
-      }
-
-      loadIframe();
-    }, [homeData?.topVideo?.videoId]);
-
     return (
       <div className="flex flex-col gap-6 pb-10">
         {homeData.topVideo && (
           <div className="flex flex-col md:flex-row gap-6 md:gap-8 border-b border-yt-spec-light-20 dark:border-yt-spec-20 pb-8">
             <div className="w-full md:w-[50%] lg:w-[600px] aspect-video rounded-xl overflow-hidden flex-shrink-0 bg-yt-black shadow-xl">
-              {iframeSrc && (
+              {playerParams && (
                 <iframe
-                  className="w-full h-full"
-                  src={iframeSrc}
+                  src={`https://www.youtubeeducation.com/embed/${homeData.topVideo.videoId}${playerParams}`}
+                  title={homeData.topVideo.title}
                   frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  title="動画ストリーム"
-                />
+                  className="w-full h-full"
+                ></iframe>
               )}
             </div>
             <div className="flex-1 min-w-0 flex flex-col items-start pt-1">
