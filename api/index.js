@@ -43,7 +43,7 @@ app.get('/api/stream/:videoId', async (req, res) => {
     if (!videoId) return res.status(400).json({ error: 'Missing video id' });
 
     // ターゲットURL
-    const targetUrl = `https://script.google.com/macros/s/AKfycbwNyrlKOhtBNC5SOQe7if_OgbzRyUOxNlHSZhEI1wq7iKEvBDhxrDplZK_sWtfJVYh6Ww/exec?stream2=${videoId}`;
+    const targetUrl = `https://siawaseok.duckdns.org/api/stream/${videoId}/type2`;
 
     // 外部APIから取得
     const response = await fetch(targetUrl);

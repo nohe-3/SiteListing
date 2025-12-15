@@ -102,6 +102,7 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         onLoad={onLoad}
+        referrerpolicy="strict-origin-when-cross-origin"
         className="w-full h-full pointer-events-auto"
       ></iframe>
 

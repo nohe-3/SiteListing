@@ -450,7 +450,6 @@ const VideoPlayerPage: React.FC = () => {
             videoId && (
               <iframe
                 className="w-full h-full"
-                data-v-162029c1=""
                 src={iframeSrc}
                 frameborder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
