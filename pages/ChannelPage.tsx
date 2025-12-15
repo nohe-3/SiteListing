@@ -212,7 +212,32 @@ const ChannelPage: React.FC = () => {
     }
 
     return (
-      <div className="flex flex-col gap-6 pb-10"></div>
+      <div className="flex flex-col gap-6 pb-10">
+        {homeData.topVideo && (
+          <div className="flex flex-col md:flex-row gap-6 md:gap-8 border-b border-yt-spec-light-20 dark:border-yt-spec-20 pb-8">
+            <div className="w-full md:w-[50%] lg:w-[600px] aspect-video rounded-xl overflow-hidden flex-shrink-0 bg-yt-black shadow-xl">
+              {playerParams && (
+                <iframe
+                  src={`https://www.youtubeeducation.com/embed/${homeData.topVideo.videoId}${playerParams}`}
+                  title={homeData.topVideo.title}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full"
+                ></iframe>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col items-start pt-1">
+              <Link to={`/watch/${homeData.topVideo.videoId}`}>
+                <h3 className="text-xl md:text-2xl font-bold mb-3 leading-tight text-black dark:text-white">{homeData.topVideo.title}</h3>
+              </Link>
+
+              <div className="text-sm text-yt-light-gray space-y-1 mb-4 font-medium">
+                <p>再生回数: {homeData.topVideo.viewCount}</p>
+                <p>投稿日: {homeData.topVideo.published}</p>
+              </div>
+            </div>
+          </div>
         )}
 
         {homeData.playlists
