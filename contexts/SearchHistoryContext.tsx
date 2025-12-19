@@ -1,6 +1,6 @@
 
-
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
+import { usePreference } from './PreferenceContext';
 
 interface SearchHistoryContextType {
   searchHistory: string[];
@@ -15,6 +15,7 @@ const SEARCH_HISTORY_KEY = 'searchHistory';
 const MAX_HISTORY_LENGTH = 50;
 
 export const SearchHistoryProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { notifyAction, isGuestMode } = usePreference();
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     try {
       const item = window.localStorage.getItem(SEARCH_HISTORY_KEY);
@@ -34,19 +35,24 @@ export const SearchHistoryProvider: React.FC<{ children: ReactNode }> = ({ child
   }, [searchHistory]);
 
   const addSearchTerm = useCallback((term: string) => {
+    if (isGuestMode) return; // Do not save search history in guest mode
+
     setSearchHistory(prev => {
       const newHistory = [term, ...prev.filter(t => t.toLowerCase() !== term.toLowerCase())];
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
-  }, []);
+    notifyAction();
+  }, [notifyAction, isGuestMode]);
 
   const removeSearchTerms = useCallback((terms: string[]) => {
     setSearchHistory(prev => prev.filter(t => !terms.includes(t)));
-  }, []);
+    notifyAction();
+  }, [notifyAction]);
 
   const clearSearchHistory = useCallback(() => {
     setSearchHistory([]);
-  }, []);
+    notifyAction();
+  }, [notifyAction]);
 
   return (
     <SearchHistoryContext.Provider value={{ searchHistory, addSearchTerm, removeSearchTerms, clearSearchHistory }}>

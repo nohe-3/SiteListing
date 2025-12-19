@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 // FIX: Use named imports for react-router-dom components and hooks.
 import { Routes, Route, useLocation } from 'react-router-dom';
@@ -13,8 +14,9 @@ import ShortsPage from './pages/ShortsPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import HistoryPage from './pages/HistoryPage';
 import VideoPlayerPage from './pages/VideoPlayerPage';
-import ManagementPage from './pages/ManagementPage'; // Import the new page
-import LiteModePage from './pages/LiteModePage'; // Import Lite Page
+import ManagementPage from './pages/ManagementPage'; 
+import LiteModePage from './pages/LiteModePage';
+import DataSyncPage from './components/DataSyncPage'; // Import DataSyncPage
 import { useTheme } from './hooks/useTheme';
 import { AiProvider } from './contexts/AiContext';
 import { usePreference } from './contexts/PreferenceContext';
@@ -28,17 +30,29 @@ const App: React.FC = () => {
   const location = useLocation();
   const isPlayerPage = location.pathname.startsWith('/watch');
   const isShortsPage = location.pathname.startsWith('/shorts');
+  const isSyncPage = location.pathname === '/datasync'; // Check for sync page
 
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(!isPlayerPage);
   const [isHistoryDeletionModalOpen, setIsHistoryDeletionModalOpen] = useState(false);
   const [isSearchHistoryDeletionModalOpen, setIsSearchHistoryDeletionModalOpen] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
     // Check for updates on mount
     if (checkAppVersion()) {
         setShowUpdateModal(true);
     }
+
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+    };
   }, [checkAppVersion]);
 
   useEffect(() => {
@@ -51,6 +65,15 @@ const App: React.FC = () => {
         setIsSidebarOpen(false);
     }
   }, [location.pathname, isPlayerPage, isShortsPage]);
+
+  // Special route for Data Sync (No Header/Sidebar needed)
+  if (isSyncPage) {
+      return (
+          <div className="min-h-screen bg-yt-white dark:bg-yt-black">
+              <DataSyncPage />
+          </div>
+      );
+  }
 
   // If Lite Mode is active, render ONLY the Lite Page
   if (isLiteMode) {
@@ -100,10 +123,17 @@ const App: React.FC = () => {
             openHistoryDeletionModal={openHistoryDeletionModal}
             openSearchHistoryDeletionModal={openSearchHistoryDeletionModal}
         />
+        
+        {/* Offline Banner */}
+        {!isOnline && (
+            <div className="fixed top-14 left-0 right-0 bg-gray-600 text-white text-xs font-bold text-center py-1 z-[60]">
+                オフラインモード: 保存されたコンテンツのみ表示されます
+            </div>
+        )}
+
         <div className="flex">
             {shouldShowSidebar() && <Sidebar isOpen={isSidebarOpen} />}
-            {/* FIX: Removed key={location.pathname} to prevent full re-renders on URL changes (especially for Shorts navigation) */}
-            <main className={`flex-1 mt-14 ${mainContentMargin} ${mainContentPadding} transition-all duration-300 ease-in-out ml-0 overflow-x-hidden animate-fade-in-main`}>
+            <main className={`flex-1 mt-14 ${!isOnline ? 'pt-6' : ''} ${mainContentMargin} ${mainContentPadding} transition-all duration-300 ease-in-out ml-0 overflow-x-hidden animate-fade-in-main`}>
             <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/watch/:videoId" element={<VideoPlayerPage />} />
@@ -115,7 +145,8 @@ const App: React.FC = () => {
                 <Route path="/shorts/*" element={<ShortsPage />} />
                 <Route path="/subscriptions" element={<SubscriptionsPage />} />
                 <Route path="/history" element={<HistoryPage />} />
-                <Route path="/management" element={<ManagementPage />} /> {/* Add new route */}
+                <Route path="/management" element={<ManagementPage />} />
+                <Route path="/datasync" element={<DataSyncPage />} /> {/* Route registration */}
                 <Route path="*" element={<HomePage />} />
             </Routes>
             </main>

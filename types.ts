@@ -13,6 +13,7 @@ export interface Video {
   descriptionSnippet?: string;
   collaborators?: Channel[]; // 複数チャンネル対応
   isAiRecommended?: boolean; // AIレコメンド識別用
+  isLive?: boolean;
 }
 
 export interface ChannelBadge {
@@ -32,6 +33,7 @@ export interface VideoDetails extends Video {
   description: string;
   likes: string;
   dislikes: string;
+  commentCount?: string; // コメント総数を追加
   channel: Channel;
   relatedVideos: Video[];
 }
@@ -103,6 +105,28 @@ export interface Comment {
   like_count: string;
   reply_count: string;
   is_pinned: boolean;
+}
+
+export interface CommentResponse {
+    comments: Comment[];
+    continuation?: string;
+}
+
+export interface CommunityPost {
+    id: string;
+    text: string;
+    publishedTime: string;
+    likeCount: string;
+    author: {
+        name: string;
+        avatar: string;
+    };
+    attachment?: {
+        type: string;
+        images?: string[];
+        choices?: string[]; // Poll
+        videoId?: string;
+    } | null;
 }
 
 export interface SearchResults {

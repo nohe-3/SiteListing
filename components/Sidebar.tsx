@@ -1,3 +1,4 @@
+
 import React from 'react';
 // FIX: Use named import for NavLink from react-router-dom
 import { NavLink } from 'react-router-dom';
@@ -14,10 +15,10 @@ const SidebarItem: React.FC<{ icon: React.ReactNode; label: string; to: string; 
       to={to} 
       end
       className={({ isActive }) => 
-        `flex items-center px-3 py-2.5 mx-2 rounded-xl text-[15px] ${isActive ? 'bg-yt-spec-light-10 dark:bg-[#272727] font-medium' : 'hover:bg-yt-spec-light-10 dark:hover:bg-[#272727] font-normal'}`
+        `flex items-center px-3 py-2.5 mx-3 rounded-lg text-[15px] transition-colors ${isActive ? 'bg-[#f2f2f2] dark:bg-[#272727] font-semibold' : 'hover:bg-[#f2f2f2] dark:hover:bg-[#272727] font-normal'}`
       }
     >
-        <span className="mr-5">{icon}</span>
+        <span className="mr-6">{icon}</span>
         <span className="truncate">{label}</span>
     </NavLink>
 );
@@ -26,7 +27,7 @@ const SmallSidebarItem: React.FC<{ icon: React.ReactNode; label: string; to: str
     <NavLink 
       to={to}
       end
-      className={({ isActive }) => `flex flex-col items-center justify-center py-4 rounded-lg text-[10px] w-full hover:bg-yt-spec-light-10 dark:hover:bg-[#272727] ${isActive ? '' : ''}`}
+      className={({ isActive }) => `flex flex-col items-center justify-center py-4 rounded-lg text-[10px] w-full hover:bg-[#f2f2f2] dark:hover:bg-[#272727] mb-1 ${isActive ? '' : ''}`}
     >
         <span className="mb-1.5">{icon}</span>
         <span className="text-ellipsis overflow-hidden whitespace-nowrap w-full text-center px-1">{label}</span>
@@ -84,7 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen }) => {
                         key={channel.id}
                         to={`/channel/${channel.id}`}
                         className={({ isActive }) => 
-                            `flex items-center px-3 py-2 mx-2 rounded-xl text-[15px] ${isActive ? 'bg-yt-spec-light-10 dark:bg-[#272727] font-medium' : 'hover:bg-yt-spec-light-10 dark:hover:bg-[#272727] font-normal'}`
+                            `flex items-center px-3 py-2 mx-3 rounded-lg text-[15px] transition-colors ${isActive ? 'bg-[#f2f2f2] dark:bg-[#272727] font-semibold' : 'hover:bg-[#f2f2f2] dark:hover:bg-[#272727] font-normal'}`
                         }
                     >
                         <img src={channel.avatarUrl} alt={channel.name} className="w-6 h-6 rounded-full flex-shrink-0" />
