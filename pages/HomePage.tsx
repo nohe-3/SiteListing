@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import VideoGrid from '../components/VideoGrid';
 import ShortsShelf from '../components/ShortsShelf';
@@ -11,7 +10,7 @@ import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import type { Video } from '../types';
 import { SearchIcon, SaveIcon, DownloadIcon } from '../components/icons/Icons';
 
-const MAX_FEED_VIDEOS = 1200; // Increased capacity for longer browsing
+const MAX_FEED_VIDEOS = 800; 
 
 const HomePage: React.FC = () => {
     const [feed, setFeed] = useState<Video[]>([]);
@@ -56,17 +55,11 @@ const HomePage: React.FC = () => {
         else setIsFetchingMore(true);
         
         try {
-            let newVideos: Video[] = [];
-            let newShorts: Video[] = [];
-
-            // XRAI Algorithm for guest users (Default now)
-            const xraiRes = await getXraiRecommendations({
+            const { videos: newVideos, shorts: newShorts } = await getXraiRecommendations({
                 searchHistory, watchHistory, shortsHistory, subscribedChannels,
                 ngKeywords, ngChannels, hiddenVideos, negativeKeywords,
                 page: pageNum
             });
-            newVideos = xraiRes.videos;
-            newShorts = xraiRes.shorts;
             
             if (newVideos.length === 0 && pageNum > 1) {
                 setHasNextPage(false);
@@ -77,10 +70,12 @@ const HomePage: React.FC = () => {
             const uniqueNewVideos = newVideos.filter(v => !seenIdsRef.current.has(v.id));
             uniqueNewVideos.forEach(v => seenIdsRef.current.add(v.id));
 
-            // Only update shorts on initial load or if we have new distinct ones
+            const uniqueNewShorts = newShorts.filter(s => !seenIdsRef.current.has(s.id));
+            uniqueNewShorts.forEach(s => seenIdsRef.current.add(s.id));
+
             if (isInitial) {
                 setFeed(uniqueNewVideos);
-                setShortsFeed(newShorts);
+                setShortsFeed(uniqueNewShorts);
             } else {
                 setFeed(prev => {
                     const combined = [...prev, ...uniqueNewVideos];
@@ -90,6 +85,15 @@ const HomePage: React.FC = () => {
                     }
                     return combined;
                 });
+                if (uniqueNewShorts.length > 0) {
+                   setShortsFeed(prev => {
+                       if (prev.length < 50) {
+                           const combined = [...prev, ...uniqueNewShorts];
+                           return Array.from(new Map(combined.map(item => [item.id, item])).values());
+                       }
+                       return prev;
+                   });
+                }
             }
 
         } catch (err: any) {
@@ -149,7 +153,7 @@ const HomePage: React.FC = () => {
                 </p>
                 <div className="flex gap-4">
                     <button 
-                        onClick={() => exportUserData()}
+                        onClick={exportUserData}
                         className="flex items-center gap-2 px-4 py-2 bg-yt-light dark:bg-yt-spec-10 rounded-lg hover:bg-gray-200 dark:hover:bg-yt-spec-20 transition-colors text-sm font-medium"
                     >
                         <DownloadIcon />
@@ -178,7 +182,7 @@ const HomePage: React.FC = () => {
         <div className="pb-10 pt-4">
             {error && <div className="text-red-500 text-center mb-4">{error}</div>}
             
-            {(shortsFeed.length > 0) && (
+            {(shortsFeed.length > 0 || isLoading) && (
                 <div className="mb-8">
                     <ShortsShelf shorts={shortsFeed} isLoading={isLoading && shortsFeed.length === 0} />
                     <hr className="border-yt-spec-light-20 dark:border-yt-spec-20 mt-6" />

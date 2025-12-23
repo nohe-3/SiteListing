@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 // FIX: Use named import for useSearchParams from react-router-dom
 import { useSearchParams } from 'react-router-dom';
@@ -10,13 +9,6 @@ import SearchPlaylistResultCard from '../components/SearchPlaylistResultCard';
 import ShortsShelf from '../components/ShortsShelf';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { usePreference } from '../contexts/PreferenceContext';
-
-const SORT_OPTIONS = [
-    { label: '関連度順', value: 'relevance' },
-    { label: 'アップロード日順', value: 'upload_date' },
-    { label: '視聴回数順', value: 'view_count' },
-    { label: '評価順', value: 'rating' },
-];
 
 const SearchResultsPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -33,8 +25,6 @@ const SearchResultsPage: React.FC = () => {
     
     const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined);
     const [isFetchingMore, setIsFetchingMore] = useState(false);
-    
-    const [sortBy, setSortBy] = useState<string>('relevance');
 
     const isContentAllowed = useCallback((item: Video | Channel | ApiPlaylist) => {
         const lowerQuery = (text: string) => text.toLowerCase();
@@ -61,7 +51,7 @@ const SearchResultsPage: React.FC = () => {
         return true;
     }, [ngChannels, ngKeywords]);
 
-    const performSearch = useCallback(async (searchQuery: string, pageToken: string = '1', sort: string = 'relevance') => {
+    const performSearch = useCallback(async (searchQuery: string, pageToken: string = '1') => {
         if (!searchQuery) return;
         
         if (pageToken === '1') {
@@ -72,7 +62,7 @@ const SearchResultsPage: React.FC = () => {
         }
         
         try {
-            const results = await searchVideos(searchQuery, pageToken, undefined, sort === 'relevance' ? undefined : sort);
+            const results = await searchVideos(searchQuery, pageToken);
             
             const separatedShorts: Video[] = [];
             const separatedVideos: Video[] = [];
@@ -108,24 +98,19 @@ const SearchResultsPage: React.FC = () => {
         }
     }, [isContentAllowed]);
 
-    // Reset when query changes
-    useEffect(() => {
-        setSortBy('relevance');
-    }, [query]);
-
     useEffect(() => {
         setVideos([]);
         setShorts([]);
         setChannels([]);
         setPlaylists([]);
         setNextPageToken(undefined);
-        if (query) performSearch(query, '1', sortBy);
+        if (query) performSearch(query, '1');
         else setIsLoading(false);
-    }, [query, sortBy, performSearch]);
+    }, [query, performSearch]);
 
     const handleLoadMore = () => {
         if (query && nextPageToken && !isFetchingMore) {
-            performSearch(query, nextPageToken, sortBy);
+            performSearch(query, nextPageToken);
         }
     };
 
@@ -158,21 +143,6 @@ const SearchResultsPage: React.FC = () => {
 
     return (
         <div className="max-w-6xl mx-auto px-2 sm:px-4 py-4">
-            {/* Filter Bar */}
-            <div className="flex overflow-x-auto pb-4 mb-4 gap-2 no-scrollbar">
-                {SORT_OPTIONS.map(opt => (
-                    <button
-                        key={opt.value}
-                        onClick={() => setSortBy(opt.value)}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors border ${sortBy === opt.value 
-                            ? 'bg-black text-white dark:bg-white dark:text-black border-transparent' 
-                            : 'bg-yt-light dark:bg-[#272727] text-black dark:text-white border-transparent hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
-            </div>
-
             {channels.length > 0 && (
                 <div className="mb-6 space-y-4">
                     {channels.map(channel => (

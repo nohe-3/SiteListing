@@ -1,4 +1,8 @@
 
+
+
+
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 // FIX: Use named imports for react-router-dom components and hooks.
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -221,13 +225,13 @@ const PlaylistPage: React.FC = () => {
                                     </div>
 
                                     {/* Thumbnail */}
-                                    <Link to={`/watch/${video.id}?list=${playlist.id}`} state={{ video }} className="relative w-40 aspect-video flex-shrink-0 rounded-lg overflow-hidden bg-yt-dark-gray">
+                                    <Link to={`/watch/${video.id}?list=${playlist.id}`} className="relative w-40 aspect-video flex-shrink-0 rounded-lg overflow-hidden bg-yt-dark-gray">
                                         <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
                                         <span className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 rounded">{video.duration}</span>
                                     </Link>
 
                                     {/* Info */}
-                                    <Link to={`/watch/${video.id}?list=${playlist.id}`} state={{ video }} className="flex-1 flex flex-col justify-center min-w-0">
+                                    <Link to={`/watch/${video.id}?list=${playlist.id}`} className="flex-1 flex flex-col justify-center min-w-0">
                                         <h3 className="text-base font-bold text-black dark:text-white line-clamp-2 mb-1 group-hover:opacity-80">{video.title}</h3>
                                         <div className="flex items-center gap-2 text-sm text-yt-light-gray">
                                             <span>{video.channelName}</span>

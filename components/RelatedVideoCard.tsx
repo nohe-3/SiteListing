@@ -1,4 +1,3 @@
-
 import React from 'react';
 // FIX: Use named import for Link from react-router-dom
 import { Link } from 'react-router-dom';
@@ -10,7 +9,7 @@ interface RelatedVideoCardProps {
 
 const RelatedVideoCard: React.FC<RelatedVideoCardProps> = ({ video }) => {
   return (
-    <Link to={`/watch/${video.id}`} state={{ video }} className="flex gap-2 group">
+    <Link to={`/watch/${video.id}`} className="flex gap-2 group">
         <div className="relative flex-shrink-0 w-40">
             <img src={video.thumbnailUrl} alt={video.title} className="w-full h-auto aspect-video object-cover rounded-lg" />
             <span className="absolute bottom-1 right-1 bg-black bg-opacity-80 text-white text-xs px-1.5 py-0.5 rounded-md">

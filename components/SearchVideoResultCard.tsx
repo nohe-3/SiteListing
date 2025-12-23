@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Use named import for Link from react-router-dom
 import { Link } from 'react-router-dom';
@@ -36,7 +35,7 @@ const SearchVideoResultCard: React.FC<SearchVideoResultCardProps> = ({ video }) 
   const hasCollaborators = video.collaborators && video.collaborators.length > 1;
 
   return (
-    <Link to={`/watch/${video.id}`} state={{ video }} className="flex flex-col sm:flex-row gap-4 group mb-4">
+    <Link to={`/watch/${video.id}`} className="flex flex-col sm:flex-row gap-4 group mb-4">
       {/* Thumbnail - Increased size */}
       <div className="relative flex-shrink-0 w-full sm:w-[360px] aspect-video rounded-xl overflow-hidden">
         <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />

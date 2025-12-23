@@ -1,4 +1,3 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 // FIX: Use named import for BrowserRouter from react-router-dom
@@ -21,17 +20,17 @@ root.render(
   <React.StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <PreferenceProvider>
-          <SubscriptionProvider>
-            <PlaylistProvider>
-              <SearchHistoryProvider>
-                <HistoryProvider>
+        <SubscriptionProvider>
+          <PlaylistProvider>
+            <SearchHistoryProvider>
+              <HistoryProvider>
+                <PreferenceProvider>
                   <App />
-                </HistoryProvider>
-              </SearchHistoryProvider>
-            </PlaylistProvider>
-          </SubscriptionProvider>
-        </PreferenceProvider>
+                </PreferenceProvider>
+              </HistoryProvider>
+            </SearchHistoryProvider>
+          </PlaylistProvider>
+        </SubscriptionProvider>
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>

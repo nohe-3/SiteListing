@@ -1,7 +1,7 @@
 
+
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import type { Channel } from '../types';
-import { usePreference } from './PreferenceContext';
 
 interface SubscriptionContextType {
   subscribedChannels: Channel[];
@@ -13,7 +13,6 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
 export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { notifyAction } = usePreference();
   const [subscribedChannels, setSubscribedChannels] = useState<Channel[]>(() => {
     try {
       const item = window.localStorage.getItem('subscribedChannels');
@@ -40,12 +39,10 @@ export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({ childr
       }
       return [...prev, channel];
     });
-    notifyAction();
   };
 
   const unsubscribe = (channelId: string) => {
     setSubscribedChannels(prev => prev.filter(c => c.id !== channelId));
-    notifyAction();
   };
 
   const isSubscribed = (channelId: string) => {

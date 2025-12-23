@@ -1,12 +1,12 @@
 
 import React, { createContext, useState, useContext, ReactNode, useRef, useMemo, useCallback } from 'react';
-import * as webllm from "@mlc-ai/web-llm";
 import { useHistory } from './HistoryContext';
 import { useSubscription } from './SubscriptionContext';
 import { buildUserProfile, inferTopInterests } from '../utils/xrai';
 import type { Video } from '../types';
 
-// Use Phi-3.5-mini-instruct for high performance (12B equivalent reasoning) with low VRAM usage
+type WebLLMModule = typeof import("@mlc-ai/web-llm");
+
 const SELECTED_MODEL = "Phi-3.5-mini-instruct-q4f16_1-MLC"; 
 
 interface AiContextType {
@@ -26,7 +26,8 @@ export const AiProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState('');
   
-  const engine = useRef<webllm.MLCEngine | null>(null);
+  const engine = useRef<any>(null);
+  const webllmRef = useRef<WebLLMModule | null>(null);
   const discoveryVideoCache = useRef<Video[]>([]); // Cache for discovered videos to prevent reload flickering
 
   const { history } = useHistory();
@@ -36,15 +37,21 @@ export const AiProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     if (engine.current || isLoading) return;
     
     setIsLoading(true);
-    setLoadProgress('エンジンの初期化中...');
+    setLoadProgress('AIモジュールを読み込み中...');
 
     try {
-      const initProgressCallback = (report: webllm.InitProgressReport) => {
+      if (!webllmRef.current) {
+        webllmRef.current = await import("@mlc-ai/web-llm");
+      }
+      const webllm = webllmRef.current;
+      
+      setLoadProgress('エンジンの初期化中...');
+
+      const initProgressCallback = (report: { text: string }) => {
         setLoadProgress(report.text);
       };
 
-      // Explicitly configure app config to ensure caching is used
-      const appConfig: webllm.AppConfig = {
+      const appConfig = {
         ...webllm.prebuiltAppConfig,
         useIndexedDBCache: true,
       };

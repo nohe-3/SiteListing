@@ -80,6 +80,7 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
       return originalUrl;
     }
   }
+
   return (
     <div className="h-full w-full relative flex-shrink-0 bg-yt-black group">
       {fromChannel && (
@@ -96,11 +97,12 @@ const ShortsPlayer = forwardRef<HTMLIFrameElement, ShortsPlayerProps>(({ video, 
         ref={ref}
         id={id}
         src={normalizeYoutubeEmbedUrl(iframeSrc)}
-        title={video.title}
+        title="動画ストリーム"
         frameBorder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         onLoad={onLoad}
+        referrerpolicy="strict-origin-when-cross-origin"
         className="w-full h-full pointer-events-auto"
       ></iframe>
 

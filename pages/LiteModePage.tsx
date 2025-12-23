@@ -1,7 +1,6 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { usePreference } from '../contexts/PreferenceContext';
-import { getRawStreamData, getPlayerConfig } from '../utils/api';
 
 const LiteModePage: React.FC = () => {
     const { toggleLiteMode } = usePreference();
@@ -12,25 +11,12 @@ const LiteModePage: React.FC = () => {
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [streamData, setStreamData] = useState<any | null>(null);
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
     
     // UI State
     const [activeView, setActiveView] = useState<'none' | 'player' | 'download'>('none');
     
     const playerContainerRef = useRef<HTMLDivElement>(null);
     const progressInterval = useRef<any>(null);
-
-    // Online/Offline Listener
-    useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, []);
 
     const extractYouTubeVideoId = (url: string) => {
         const match = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
@@ -56,11 +42,12 @@ const LiteModePage: React.FC = () => {
         setProgress(100);
     };
 
-    // Use centralized getPlayerConfig which has 1-day cache
     const fetchKey = async () => {
         try {
-            const params = await getPlayerConfig();
-            return params ? params.trim() : '?autoplay=1';
+            const response = await fetch('https://raw.githubusercontent.com/siawaseok3/wakame/master/video_config.json');
+            if (!response.ok) throw new Error('キー取得に失敗しました');
+            const jsonData = await response.json();
+            return jsonData.params ? jsonData.params.trim() : '?autoplay=1';
         } catch (e) {
             console.error("Failed to fetch key", e);
             return '?autoplay=1';
@@ -73,12 +60,6 @@ const LiteModePage: React.FC = () => {
             setError('無効なYouTubeリンクです。');
             setActiveView('none');
             return;
-        }
-
-        if (actionType === 'embed' && !isOnline) {
-            // Check if we have cached config, if so we might try, but iframe usually needs network for the video content
-            // unless browser cached it.
-            // We will allow it but warn.
         }
 
         if (vId !== videoId) {
@@ -103,16 +84,14 @@ const LiteModePage: React.FC = () => {
                 }
             } else {
                 let data = streamData;
-                
-                // If we don't have data, try to fetch (will use localStorage cache if available)
                 if (!data || vId !== videoId) {
-                    try {
-                        data = await getRawStreamData(vId);
-                        setStreamData(data);
-                    } catch (fetchErr) {
-                        // Offline and not cached
-                        throw new Error('オフラインです。キャッシュされたデータが見つかりませんでした。');
+                    // Fetch from the proxy endpoint that returns the detailed JSON
+                    const response = await fetch(`/api/stream/${vId}`);
+                    if (!response.ok) {
+                        throw new Error(`ストリーム情報の取得に失敗しました。 (${response.status})`);
                     }
+                    data = await response.json();
+                    setStreamData(data);
                 }
 
                 if (actionType === 'stream') {
@@ -139,34 +118,16 @@ const LiteModePage: React.FC = () => {
     const createStreamPlayer = (data: any, container: HTMLDivElement | null) => {
         if (!container) return;
         
-        container.innerHTML = '';
-
-        if (!isOnline && !data) {
-             // Redundant check handled by handleAction catch block, but kept for safety
-            setError('ストリーミング再生はオンライン時のみ、またはキャッシュがある場合のみ利用可能です。');
-            return;
-        }
-
-        // Prioritize 360p video URL from new structure
-        let url = data.streamingUrl; // Often this is the 360p or 720p direct link
+        // Prioritize 360p video URL
+        const url = data.videourl?.['360p']?.video?.url;
         
-        if (!url && data.combinedFormats) {
-            // Fallback to searching in combinedFormats
-            const format = data.combinedFormats.find((f: any) => f.quality === '360p' || f.quality === '720p');
-            if (format) url = format.url;
-        }
-
         if (!url) {
-            setError('ストリーミング可能な動画ソース(360p/720p)が見つかりませんでした。');
+            setError('ストリーミング可能な動画ソース(360p)が見つかりませんでした。');
+            container.innerHTML = '';
             return;
         }
 
-        // Use direct URL if offline to skip proxy attempt which requires server
-        // However, direct YouTube URLs often fail CORS without proxy.
-        // If offline, we rely on browser cache of the video file itself (rare) OR if the URL is accessible.
-        // For cached metadata display, we proceed. Playback might fail if media isn't cached.
-        const videoSrc = isOnline ? `/api/video-proxy?url=${encodeURIComponent(url)}` : url;
-
+        container.innerHTML = '';
         const video = document.createElement('video');
         video.controls = true;
         video.autoplay = true;
@@ -174,21 +135,12 @@ const LiteModePage: React.FC = () => {
         video.style.borderRadius = "8px";
         video.style.aspectRatio = "16/9";
         video.style.backgroundColor = "#000";
-        video.src = videoSrc;
+        video.src = url;
         video.setAttribute('playsinline', '');
         
         container.appendChild(video);
         
         video.play().catch(e => console.warn("Autoplay prevented:", e));
-        
-        if (!isOnline) {
-             const warning = document.createElement('p');
-             warning.style.color = '#d32f2f';
-             warning.style.fontSize = '0.8rem';
-             warning.style.marginTop = '5px';
-             warning.innerText = '※オフラインモード: 動画ファイル自体がブラウザにキャッシュされていない場合、再生できない可能性があります。';
-             container.appendChild(warning);
-        }
     };
 
     const handlePaste = async () => {
@@ -200,16 +152,8 @@ const LiteModePage: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-[#f7f8fa] flex flex-col items-center justify-center p-4 font-sans text-[#333]">
-            <div className="bg-white shadow-[0_4px_32px_rgba(0,0,0,0.08)] rounded-[18px] p-8 md:p-10 w-full max-w-[680px] text-center relative overflow-hidden">
-                
-                {/* Offline Badge */}
-                {!isOnline && (
-                    <div className="absolute top-0 left-0 right-0 bg-gray-500 text-white text-xs font-bold py-1">
-                        オフラインモード (キャッシュ利用可能)
-                    </div>
-                )}
-
-                <div className="text-[2.6rem] font-bold text-[#3c3e4e] mb-2 tracking-wide mt-2">XeroxYT LiteV2</div>
+            <div className="bg-white shadow-[0_4px_32px_rgba(0,0,0,0.08)] rounded-[18px] p-8 md:p-10 w-full max-w-[680px] text-center">
+                <div className="text-[2.6rem] font-bold text-[#3c3e4e] mb-2 tracking-wide">XeroxYT LiteV2</div>
                 <div className="text-[#667085] text-[1.05rem] mb-2">動画を高画質・高速で再生・ダウンロード</div>
                 <div className="text-[#667085] text-sm mb-8">ストリーミング・ダウンロードは360p固定になっています</div>
                 
@@ -230,6 +174,7 @@ const LiteModePage: React.FC = () => {
                 <div className="flex flex-wrap justify-center gap-4 mt-6">
                     <button 
                         onClick={() => handleAction('embed')} 
+                        disabled={isLoading}
                         className="bg-[#7c3aed] text-white border-none rounded-[8px] px-6 py-3 text-[1.1rem] font-semibold cursor-pointer shadow-[0_2px_8px_rgba(124,58,237,0.06)] hover:bg-[#5e3fd7] disabled:opacity-50"
                     >
                         {isLoading && loadingAction === 'embed' ? `処理中... ${progress}%` : 'youtube player'}
@@ -261,34 +206,26 @@ const LiteModePage: React.FC = () => {
                 {/* Download Links */}
                 {activeView === 'download' && streamData && (
                     <div className="mt-8 text-left">
-                        <h3 className="text-center text-[#3c3e4e] text-xl font-bold mb-4">Download Links { !isOnline && "(Cached)" }</h3>
+                        <h3 className="text-center text-[#3c3e4e] text-xl font-bold mb-4">Download Links</h3>
                         <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto">
                             {/* Video Links */}
-                            {/* 1080p */}
-                            {streamData.separate1080p?.video?.url && (
-                                <a href={streamData.separate1080p.video.url} target="_blank" rel="noreferrer" className="block bg-[#f7f8fa] border-[1.5px] border-[#e0e3eb] rounded-[8px] p-3 text-[#333] font-medium hover:bg-[#e9ecf0] transition-colors break-all">
-                                    Download Video 1080p (映像のみ) (MP4)
-                                </a>
-                            )}
-                            
-                            {/* Combined Formats (720p, 360p, etc.) */}
-                            {streamData.combinedFormats && streamData.combinedFormats.map((format: any, index: number) => {
-                                const quality = format.quality || 'Unknown';
-                                const url = format.url;
+                            {['1080p', '720p', '480p', '360p', '240p'].map(quality => {
+                                const url = streamData.videourl?.[quality]?.video?.url;
                                 if (!url) return null;
+                                const label = quality === '360p' ? `${quality} (音声あり)` : `${quality} (音声なし)`;
                                 return (
-                                    <a key={index} href={url} target="_blank" rel="noreferrer" className="block bg-[#f7f8fa] border-[1.5px] border-[#e0e3eb] rounded-[8px] p-3 text-[#333] font-medium hover:bg-[#e9ecf0] transition-colors break-all">
-                                        Download Video {quality} (音声あり) (MP4)
+                                    <a key={quality} href={url} target="_blank" rel="noreferrer" className="block bg-[#f7f8fa] border-[1.5px] border-[#e0e3eb] rounded-[8px] p-3 text-[#333] font-medium hover:bg-[#e9ecf0] transition-colors break-all">
+                                        Download Video {label} (MP4)
                                     </a>
                                 );
                             })}
                             
                             {/* Audio Link */}
-                            {streamData.audioOnlyFormat?.url && (
+                            {streamData.videourl?.['144p']?.audio?.url && (
                                 <>
                                     <h4 className="mt-4 font-bold text-[#333]">オーディオ (音声のみ)</h4>
-                                    <a href={streamData.audioOnlyFormat.url} target="_blank" rel="noreferrer" className="block bg-[#f7f8fa] border-[1.5px] border-[#e0e3eb] rounded-[8px] p-3 text-[#333] font-medium hover:bg-[#e9ecf0] transition-colors break-all">
-                                        Download Audio {streamData.audioOnlyFormat.quality || ''} (M4A)
+                                    <a href={streamData.videourl['144p'].audio.url} target="_blank" rel="noreferrer" className="block bg-[#f7f8fa] border-[1.5px] border-[#e0e3eb] rounded-[8px] p-3 text-[#333] font-medium hover:bg-[#e9ecf0] transition-colors break-all">
+                                        Download Audio (M4A)
                                     </a>
                                 </>
                             )}

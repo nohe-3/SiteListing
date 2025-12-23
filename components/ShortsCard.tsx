@@ -1,4 +1,3 @@
-
 import React from 'react';
 // FIX: Use named import for Link from react-router-dom
 import { Link } from 'react-router-dom';
@@ -9,16 +8,14 @@ interface ShortsCardProps {
   context?: {
     type: 'channel' | 'home' | 'search';
     channelId?: string;
-    sort?: 'latest' | 'popular';
   };
-  sourceQueue?: Video[];
 }
 
-const ShortsCard: React.FC<ShortsCardProps> = ({ video, context, sourceQueue }) => {
+const ShortsCard: React.FC<ShortsCardProps> = ({ video, context }) => {
   return (
     <Link 
       to={`/shorts/${video.id}`} 
-      state={{ context, initialVideos: sourceQueue }}
+      state={{ context }}
       className="w-full group block"
     >
       <div className="relative rounded-xl overflow-hidden aspect-[9/16] bg-yt-light dark:bg-yt-dark-gray shadow-md group-hover:shadow-xl transition-all duration-300">
