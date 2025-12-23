@@ -12,7 +12,6 @@ import { usePreference } from '../contexts/PreferenceContext';
 import HorizontalScrollContainer from '../components/HorizontalScrollContainer';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { BlockIcon, LikeIcon, CommentIcon } from '../components/icons/Icons';
-
 type Tab = 'home' | 'videos' | 'shorts' | 'live' | 'community';
 type SortOrder = 'latest' | 'popular' | 'oldest';
 type ShortsSortOrder = 'latest' | 'popular';
