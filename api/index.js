@@ -1,167 +1,172 @@
-import express from "express";
-import { Innertube } from "youtubei.js";
-import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import express from "express";
+import { Innertube, UniversalCache } from "youtubei.js";
 
 const app = express();
 
-// 本番環境で静的ファイルを配信
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../dist')));
-}
+app.use(express.json());
 
 // CORS設定
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
   next();
-});
-
-// ヘルスチェック用エンドポイント
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
 
 // YouTubeクライアントの作成ヘルパー
 const createYoutube = async () => {
-  return await Innertube.create({ 
-    lang: "ja", 
+  const options = {
+    lang: "ja",
     location: "JP",
-  });
+    cache: new UniversalCache(false), 
+    generate_session_locally: true,
+  };
+  return await Innertube.create(options);
 };
 
 // -------------------------------------------------------------------
-// ストリーム Proxy API (/api/stream/:videoId)
+// Helper / Proxy Endpoints
 // -------------------------------------------------------------------
+app.get('/api/suggest', async (req, res) => {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+    try {
+        const url = `https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(q)}`;
+        const response = await fetch(url);
+        const text = await response.text();
+        const match = text.match(/window\.google\.ac\.h\((.*)\)/);
+        if (match && match[1]) {
+            const data = JSON.parse(match[1]);
+            const suggestions = data[1].map(item => item[0]);
+            return res.json(suggestions);
+        }
+        res.json([]);
+    } catch (err) {
+        res.json([]);
+    }
+});
+
 app.get('/api/stream/:videoId', async (req, res) => {
   try {
     const { videoId } = req.params;
     if (!videoId) return res.status(400).json({ error: "Missing video id" });
-
-    // ターゲットURL
-    const targetUrl = `https://siawaseok.duckdns.org/api/stream/${videoId}/type2`;
-
-    // 外部APIから取得
+    
+    const targetUrl = `https://xeroxdwapi.vercel.app/api/video-info?videoId=${videoId}`;
+    
     const response = await fetch(targetUrl);
-
-    // ステータスコードを転送
     res.status(response.status);
-
-    // ヘッダーを転送
     response.headers.forEach((val, key) => {
+      const lowerKey = key.toLowerCase();
+      if (['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'access-control-allow-origin'].includes(lowerKey)) return;
       res.setHeader(key, val);
     });
-
-    if (!response.body) {
-      return res.end();
-    }
-
+    if (!response.body) return res.end();
     // @ts-ignore
     const reader = response.body.getReader();
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       res.write(value);
     }
     res.end();
-
   } catch (err) {
-    console.error('Error in /api/stream:', err);
-    if (!res.headersSent) {
-        res.status(500).json({ error: err.message });
-    } else {
-        res.end();
-    }
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.end();
   }
 });
 
-// -------------------------------------------------------------------
-// 動画詳細 API (/api/video)
-// -------------------------------------------------------------------
+app.get('/api/video-proxy', async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') return res.status(400).end();
+  try {
+    const headers = {};
+    if (req.headers.range) headers['Range'] = req.headers.range;
+    headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    const response = await fetch(url, { headers });
+    if (!response.ok) return res.status(response.status).end();
+    const forwardHeaders = ['content-range', 'content-length', 'content-type', 'accept-ranges'];
+    forwardHeaders.forEach(name => {
+        const val = response.headers.get(name);
+        if (val) res.setHeader(name, val);
+    });
+    res.status(response.status);
+    if (!response.body) return res.end();
+    // @ts-ignore
+    const reader = response.body.getReader();
+    req.on('close', () => { reader.cancel().catch(() => {}); });
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+    }
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) res.status(500).end();
+  }
+});
+
 app.get('/api/video', async (req, res) => {
   try {
     const youtube = await createYoutube();
     const { id } = req.query;
     if (!id) return res.status(400).json({ error: "Missing video id" });
-
     const info = await youtube.getInfo(id);
-
-    // 関連動画取得ロジック
-    let allCandidates = [];
     
-    const addCandidates = (source) => {
-        if (Array.isArray(source)) allCandidates.push(...source);
-    };
-
+    // Continuation Logic for related videos - try to fetch a bit more initially
+    let allCandidates = [];
+    const addCandidates = (source) => { if (Array.isArray(source)) allCandidates.push(...source); };
     addCandidates(info.watch_next_feed);
     addCandidates(info.related_videos);
     
     try {
-      let continuationCount = 0;
       let currentFeed = info; 
       const seenIds = new Set();
       const relatedVideos = [];
-      const MAX_VIDEOS = 50;
-
+      const MAX_VIDEOS = 40; // Initial batch size increased
+      
       for (const video of allCandidates) {
          if(video.id) seenIds.add(video.id);
          relatedVideos.push(video);
       }
-
-      while (relatedVideos.length < MAX_VIDEOS && continuationCount < 2) {
-          if (typeof currentFeed.getWatchNextContinuation === 'function') {
-              currentFeed = await currentFeed.getWatchNextContinuation();
-              if (currentFeed && Array.isArray(currentFeed.watch_next_feed)) {
-                  for (const video of currentFeed.watch_next_feed) {
-                      if (relatedVideos.length >= MAX_VIDEOS) break;
-                      if (video.id && !seenIds.has(video.id)) {
-                          seenIds.add(video.id);
-                          relatedVideos.push(video);
-                      }
+      
+      // Attempt one continuation to fill the initial list if possible
+      if (relatedVideos.length < MAX_VIDEOS && typeof currentFeed.getWatchNextContinuation === 'function') {
+          currentFeed = await currentFeed.getWatchNextContinuation();
+          if (currentFeed && Array.isArray(currentFeed.watch_next_feed)) {
+              for (const video of currentFeed.watch_next_feed) {
+                  if (video.id && !seenIds.has(video.id)) {
+                      seenIds.add(video.id);
+                      relatedVideos.push(video);
                   }
               }
-          } else {
-              break;
           }
-          continuationCount++;
       }
       info.watch_next_feed = relatedVideos;
-
-    } catch (e) {
-      console.warn('[API] Continuation failed, returning basic info:', e.message);
-    }
+    } catch (e) { console.warn('[API] Continuation failed', e.message); }
 
     if (info.secondary_info) info.secondary_info.watch_next_feed = [];
     info.related_videos = [];
     info.related = [];
-
-    res.status(200).json(info);
     
+    res.status(200).json(info);
   } catch (err) {
-    console.error('Error in /api/video:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// -------------------------------------------------------------------
-// 検索 API (/api/search)
-// -------------------------------------------------------------------
 app.get('/api/search', async (req, res) => {
   try {
     const youtube = await createYoutube();
-    const { q: query, page = '1' } = req.query;
+    const { q: query, page = '1', sort_by } = req.query;
     if (!query) return res.status(400).json({ error: "Missing search query" });
 
     const targetPage = parseInt(page);
-    const ITEMS_PER_PAGE = 50;
-    
-    let search = await youtube.search(query);
-    
+    const ITEMS_PER_PAGE = 40; // Reduced slightly to balance speed and yield
+    const filters = {};
+    if (sort_by) filters.sort_by = sort_by;
+
+    let search = await youtube.search(query, filters);
     let allVideos = [...(search.videos || [])];
     let allShorts = [...(search.shorts || [])];
     let allChannels = [...(search.channels || [])];
@@ -169,7 +174,7 @@ app.get('/api/search', async (req, res) => {
 
     const requiredCount = targetPage * ITEMS_PER_PAGE;
     let continuationAttempts = 0;
-    const MAX_ATTEMPTS = 20;
+    const MAX_ATTEMPTS = 15; // Increased attempts for deeper pages
 
     while (allVideos.length < requiredCount && search.has_continuation && continuationAttempts < MAX_ATTEMPTS) {
         search = await search.getContinuation();
@@ -182,69 +187,112 @@ app.get('/api/search', async (req, res) => {
 
     const startIndex = (targetPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-
-    const pagedVideos = allVideos.slice(startIndex, endIndex);
-    const pagedShorts = targetPage === 1 ? allShorts : [];
-    const pagedChannels = targetPage === 1 ? allChannels : [];
-    const pagedPlaylists = targetPage === 1 ? allPlaylists : [];
-
-    const hasMore = allVideos.length > endIndex || search.has_continuation;
-
+    
     res.status(200).json({
-        videos: pagedVideos,
-        shorts: pagedShorts,
-        channels: pagedChannels,
-        playlists: pagedPlaylists,
-        nextPageToken: hasMore ? String(targetPage + 1) : undefined
+        videos: allVideos.slice(startIndex, endIndex),
+        shorts: targetPage === 1 ? allShorts : [],
+        channels: targetPage === 1 ? allChannels : [],
+        playlists: targetPage === 1 ? allPlaylists : [],
+        nextPageToken: allVideos.length > endIndex || search.has_continuation ? String(targetPage + 1) : undefined
     });
   } catch (err) { 
-      console.error('Error in /api/search:', err); 
       res.status(500).json({ error: err.message }); 
   }
 });
 
-// -------------------------------------------------------------------
-// コメント API (/api/comments)
-// -------------------------------------------------------------------
 app.get('/api/comments', async (req, res) => {
   try {
     const youtube = await createYoutube();
-    const { id } = req.query;
-    if (!id) return res.status(400).json({ error: "Missing video id" });
+    const { id, sort_by, continuation } = req.query;
     
-    const limit = 300;
-    let commentsSection = await youtube.getComments(id);
-    let allComments = commentsSection.contents || [];
-    
-    let attempts = 0;
-    while (allComments.length < limit && commentsSection.has_continuation && attempts < 5) {
-      commentsSection = await commentsSection.getContinuation();
-      if (commentsSection.contents) {
-        allComments = allComments.concat(commentsSection.contents);
-      }
-      attempts++;
-    }
+    if (continuation) {
+        // Stateless continuation using raw action
+        try {
+             const actions = youtube.actions;
+             const response = await actions.execute('/comment/get_comments', { continuation });
+             
+             const items = response.data?.onResponseReceivedEndpoints?.[0]?.appendContinuationItemsAction?.continuationItems 
+                        || response.data?.onResponseReceivedEndpoints?.[1]?.reloadContinuationItemsCommand?.continuationItems;
+             
+             if (!items) return res.json({ comments: [], continuation: null });
+             
+             const parsedComments = items.map(item => {
+                 const c = item.commentThreadRenderer?.comment?.commentRenderer || item.commentRenderer;
+                 if (!c) return null;
+                 return {
+                    text: c.contentText?.runs?.map(r => r.text).join('') || c.content?.text || '',
+                    comment_id: c.commentId,
+                    published_time: c.publishedTimeText?.runs?.[0]?.text || '',
+                    author: { 
+                        id: c.authorEndpoint?.browseEndpoint?.browseId, 
+                        name: c.authorText?.simpleText || c.authorText?.runs?.[0]?.text, 
+                        thumbnails: c.authorThumbnail?.thumbnails || [] 
+                    },
+                    like_count: c.voteCount?.simpleText || '0',
+                    reply_count: c.replyCount || '0',
+                    is_pinned: !!c.pinnedCommentBadge
+                 };
+             }).filter(c => c);
+             
+             const nextContinuation = items[items.length - 1]?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
+             
+             return res.json({
+                 comments: parsedComments,
+                 continuation: nextContinuation
+             });
 
-    res.status(200).json({
-      comments: allComments.slice(0, limit).map(c => ({
-        text: c.comment?.content?.text ?? null,
-        comment_id: c.comment?.comment_id ?? null,
-        published_time: c.comment?.published_time?.text ?? c.comment?.published_time ?? null,
-        author: { 
-            id: c.comment?.author?.id ?? null, 
-            name: c.comment?.author?.name?.text ?? c.comment?.author?.name ?? null, 
-            thumbnails: c.comment?.author?.thumbnails ?? [] 
-        },
-        like_count: c.comment?.like_count?.toString() ?? '0',
-        reply_count: c.comment?.reply_count?.toString() ?? '0',
-        is_pinned: c.comment?.is_pinned ?? false
-      }))
-    });
+        } catch (e) {
+            return res.status(500).json({ error: "Continuation failed: " + e.message });
+        }
+
+    } else {
+        if (!id) return res.status(400).json({ error: "Missing video id" });
+        const sortType = sort_by === 'newest' ? 'NEWEST_FIRST' : 'TOP_COMMENTS';
+        const commentsSection = await youtube.getComments(id, sortType);
+        
+        const allComments = commentsSection.contents || [];
+        const continuationToken = commentsSection.continuation_token;
+
+        res.status(200).json({
+          comments: allComments.map(c => ({
+            text: c.comment?.content?.text ?? null,
+            comment_id: c.comment?.comment_id ?? null,
+            published_time: c.comment?.published_time?.text ?? c.comment?.published_time ?? null,
+            author: { 
+                id: c.comment?.author?.id ?? null, 
+                name: c.comment?.author?.name?.text ?? c.comment?.author?.name ?? null, 
+                thumbnails: c.comment?.author?.thumbnails ?? [] 
+            },
+            like_count: c.comment?.like_count?.toString() ?? '0',
+            reply_count: c.comment?.reply_count?.toString() ?? '0',
+            is_pinned: c.comment?.is_pinned ?? false
+          })),
+          continuation: continuationToken
+        });
+    }
   } catch (err) { 
-    console.error('Error in /api/comments:', err); 
     res.status(500).json({ error: err.message }); 
   }
 });
+
+// Helper for filter application
+const applyChannelFilter = async (feed, sort) => {
+    if (!sort || sort === 'latest') return feed;
+    
+    const filters = ['Popular', '人気順', 'Most popular'];
+    let targetFilters = [];
+    
+    if (sort === 'popular') targetFilters = ['Popular', '人気順', 'Most popular'];
+    if (sort === 'oldest') targetFilters = ['Oldest', '古い順'];
+
+    for (const f of targetFilters) {
+        try {
+            const newFeed = await feed.applyFilter(f);
+            if (newFeed) return newFeed;
+        } catch (e) { /* ignore */ }
+    }
+    return feed;
+};
 
 // -------------------------------------------------------------------
 // チャンネル API (/api/channel)
@@ -252,14 +300,16 @@ app.get('/api/comments', async (req, res) => {
 app.get('/api/channel', async (req, res) => {
   try {
     const youtube = await createYoutube();
-    const { id, page = '1' } = req.query;
+    const { id, page = '1', sort } = req.query; // sort: 'latest' | 'popular' | 'oldest'
     if (!id) return res.status(400).json({ error: "Missing channel id" });
 
     const channel = await youtube.getChannel(id);
-    
     let videosFeed = await channel.getVideos();
-    let videosToReturn = videosFeed.videos || [];
+    
+    // Apply Sort
+    videosFeed = await applyChannelFilter(videosFeed, sort);
 
+    let videosToReturn = videosFeed.videos || [];
     const targetPage = parseInt(page);
     
     if (targetPage > 1) {
@@ -274,23 +324,16 @@ app.get('/api/channel', async (req, res) => {
         }
     }
     
+    // Metadata extraction
     const title = channel.metadata?.title || channel.header?.title?.text || channel.header?.author?.name || null;
     let avatar = channel.metadata?.avatar || channel.header?.avatar || channel.header?.author?.thumbnails || null;
-    
-    if (Array.isArray(avatar) && avatar.length > 0) {
-        avatar = avatar[0].url;
-    } else if (typeof avatar === 'object' && avatar?.url) {
-        avatar = avatar.url;
-    }
+    if (Array.isArray(avatar) && avatar.length > 0) avatar = avatar[0].url;
+    else if (typeof avatar === 'object' && avatar?.url) avatar = avatar.url;
 
     let banner = channel.metadata?.banner || channel.header?.banner || null;
-    if (Array.isArray(banner) && banner.length > 0) {
-        banner = banner[0].url;
-    } else if (typeof banner === 'object' && banner?.url) {
-        banner = banner.url;
-    } else if (typeof banner !== 'string') {
-        banner = null; 
-    }
+    if (Array.isArray(banner) && banner.length > 0) banner = banner[0].url;
+    else if (typeof banner === 'object' && banner?.url) banner = banner.url;
+    else if (typeof banner !== 'string') banner = null; 
 
     res.status(200).json({
       channel: {
@@ -306,36 +349,12 @@ app.get('/api/channel', async (req, res) => {
       videos: videosToReturn,
       nextPageToken: videosFeed.has_continuation ? String(targetPage + 1) : undefined
     });
-
   } catch (err) { 
       console.error('Error in /api/channel:', err); 
       res.status(500).json({ error: err.message }); 
   }
 });
 
-// -------------------------------------------------------------------
-// チャンネルホーム Proxy API (/api/channel-home-proxy)
-// -------------------------------------------------------------------
-app.get('/api/channel-home-proxy', async (req, res) => {
-  try {
-    const { id } = req.query;
-    if (!id) return res.status(400).json({ error: "Missing channel id" });
-
-    const response = await fetch(`https://siawaseok.duckdns.org/api/channel/${id}`);
-    if (!response.ok) {
-        return res.status(response.status).json({ error: "Failed to fetch from external API" });
-    }
-    const data = await response.json();
-    res.status(200).json(data);
-  } catch (err) {
-      console.error('Error in /api/channel-home-proxy:', err);
-      res.status(500).json({ error: err.message });
-  }
-});
-
-// -------------------------------------------------------------------
-// チャンネル Shorts API (/api/channel-shorts)
-// -------------------------------------------------------------------
 app.get('/api/channel-shorts', async (req, res) => {
   try {
     const youtube = await createYoutube();
@@ -363,217 +382,100 @@ app.get('/api/channel-shorts', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------------
-// チャンネル Playlists API (/api/channel-playlists)
-// -------------------------------------------------------------------
+app.get('/api/channel-home-proxy', async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: "Missing channel id" });
+    const response = await fetch(`https://siawaseok.duckdns.org/api/channel/${id}`);
+    if (!response.ok) return res.status(response.status).json({ error: "External API error" });
+    const data = await response.json();
+    res.status(200).json(data);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/channel-live', async (req, res) => {
+  try {
+    const youtube = await createYoutube();
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: "Missing channel id" });
+    const channel = await youtube.getChannel(id);
+    const liveFeed = await channel.getLiveStreams();
+    let videos = liveFeed.videos || [];
+    res.status(200).json({ videos });
+  } catch (err) {
+      res.status(200).json({ videos: [] });
+  }
+});
+
+app.get('/api/channel-community', async (req, res) => {
+  try {
+    const youtube = await createYoutube();
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: "Missing channel id" });
+    const channel = await youtube.getChannel(id);
+    const community = await channel.getCommunity();
+    const posts = community.posts?.map(post => ({
+        id: post.id,
+        text: post.content?.text || "",
+        publishedTime: post.published.text,
+        likeCount: post.vote_count?.text || "0",
+        author: { name: post.author.name, avatar: post.author.thumbnails[0]?.url },
+        attachment: post.attachment ? {
+            type: post.attachment.type,
+            images: post.attachment.images?.map(i => i.url),
+            choices: post.attachment.choices?.map(c => c.text.text),
+            videoId: post.attachment.video?.id
+        } : null
+    })) || [];
+    res.status(200).json({ posts });
+  } catch (err) {
+      res.status(200).json({ posts: [] });
+  }
+});
+
 app.get('/api/channel-playlists', async (req, res) => {
   try {
     const youtube = await createYoutube();
     const { id } = req.query;
     if (!id) return res.status(400).json({ error: "Missing channel id" });
-
     const channel = await youtube.getChannel(id);
     const playlistsFeed = await channel.getPlaylists();
-    
-    let playlists = [];
-    
-    if (playlistsFeed.playlists) {
-        playlists = playlistsFeed.playlists;
-    } 
-    else if (playlistsFeed.items) {
-        playlists = playlistsFeed.items;
-    }
-    else if (playlistsFeed.contents && Array.isArray(playlistsFeed.contents)) {
+    let playlists = playlistsFeed.playlists || playlistsFeed.items || [];
+    if (playlists.length === 0 && playlistsFeed.contents && Array.isArray(playlistsFeed.contents)) {
         const tabContent = playlistsFeed.contents[0];
-        if (tabContent && tabContent.contents) {
-             playlists = tabContent.contents;
-        }
+        if (tabContent && tabContent.contents) playlists = tabContent.contents;
     }
-
-    res.status(200).json({ playlists: playlists });
+    res.status(200).json({ playlists });
   } catch (err) { 
-      console.error('Error in /api/channel-playlists:', err); 
       res.status(500).json({ error: err.message }); 
   }
 });
 
-// -------------------------------------------------------------------
-// 再生リスト API (/api/playlist)
-// -------------------------------------------------------------------
 app.get('/api/playlist', async (req, res) => {
   try {
     const youtube = await createYoutube();
-    const { id: playlistId } = req.query;
-    if (!playlistId) return res.status(400).json({ error: "Missing playlist id" });
-
-    const playlist = await youtube.getPlaylist(playlistId);
+    const { id } = req.query;
+    const playlist = await youtube.getPlaylist(id);
     if (!playlist.info?.id) return res.status(404).json({ error: "Playlist not found"});
-    
     res.status(200).json(playlist);
   } catch (err) { 
-      console.error('Error in /api/playlist:', err); 
       res.status(500).json({ error: err.message }); 
   }
 });
 
-app.get('/api/shorts', async (req, res) => {
-  try {
-    const youtube = await createYoutube();
-    const { id } = req.query;
-    if (!id) return res.status(400).json({ error: "Missing channel id" });
-
-    const channel = await youtube.getChannel(id);
-    const shortsFeed = await channel.getShorts();
-    res.status(200).json(shortsFeed);
-
-  } catch (err) {
-    console.error("Error in /api/shorts:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// -------------------------------------------------------------------
-// ホームフィード API (/api/fvideo)
-// -------------------------------------------------------------------
 app.get('/api/fvideo', async (req, res) => {
   try {
     const youtube = await createYoutube();
-    const home = await youtube.getHomeFeed();
-    let allVideos = home.videos ? [...home.videos] : [];
-    const MAX_VIDEOS = 180;
-    
-    let attempts = 0;
-    let currentFeed = home;
-    
-    while (currentFeed.has_continuation && attempts < 6 && allVideos.length < MAX_VIDEOS) {
-        try {
-            currentFeed = await currentFeed.getContinuation();
-            if (currentFeed.videos) {
-                allVideos.push(...currentFeed.videos);
-            }
-            attempts++;
-        } catch (e) {
-            console.warn('[API] Home feed continuation failed:', e.message);
-            break;
-        }
-    }
-    
-    res.status(200).json({ videos: allVideos });
-  } catch (err) { 
-      console.error('Error in /api/fvideo:', err); 
-      res.status(500).json({ error: err.message }); 
-  }
-});
-
-app.get('/api/ai/completion', (req, res) => {
-    const { context } = req.query;
-    const topics = ["ASMR", "Gaming", "Vtuber", "Music", "Tech"];
-    const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-    
-    res.status(200).json({ 
-        response: `Suggestion based on server logic: Try watching ${randomTopic} videos!`,
-        recommended_tags: [randomTopic, "Trending", "New"]
-    });
-});
-
-// -------------------------------------------------------------------
-// プロキシサムネイル API (/api/proxy-thumbnail)
-// -------------------------------------------------------------------
-app.get('/api/proxy-thumbnail', async (req, res) => {
-  try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ error: "Missing thumbnail URL" });
-
-    const decodedUrl = decodeURIComponent(url);
-    
-    const response = await fetch(decodedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-        'Referer': 'https://www.youtube.com/',
-      }
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: "Failed to fetch thumbnail" });
-    }
-
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    const buffer = await response.arrayBuffer();
-    res.send(Buffer.from(buffer));
-
+    const homeFeed = await youtube.getHomeFeed();
+    const videos = homeFeed.videos || homeFeed.items || [];
+    res.status(200).json({ videos });
   } catch (err) {
-    console.error('Error in /api/proxy-thumbnail:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// -------------------------------------------------------------------
-// 動画IDからプロキシサムネイル取得 (/api/thumbnail/:videoId)
-// -------------------------------------------------------------------
-app.get('/api/thumbnail/:videoId', async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    const { quality } = req.query;
-    
-    if (!videoId) return res.status(400).json({ error: "Missing video id" });
-
-    const qualityMap = {
-      'maxres': 'maxresdefault',
-      'sd': 'sddefault',
-      'hq': 'hqdefault',
-      'mq': 'mqdefault',
-      'default': 'default'
-    };
-    
-    const thumbnailQuality = qualityMap[quality] || 'hqdefault';
-    const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/${thumbnailQuality}.jpg`;
-    
-    const response = await fetch(thumbnailUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-      }
-    });
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: "Failed to fetch thumbnail" });
-    }
-
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    const buffer = await response.arrayBuffer();
-    res.send(Buffer.from(buffer));
-
-  } catch (err) {
-    console.error('Error in /api/thumbnail:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 本番環境でSPA用のフォールバック
-if (process.env.NODE_ENV === 'production') {
-  app.get('/{*splat}', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
-  });
-}
-
-const PORT = process.env.PORT || 10000;
-if (!process.env.VERCEL) {
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`API Server running on port ${PORT}`);
-    console.log(`Health check available at http://0.0.0.0:${PORT}/api/health`);
-  });
-  server.keepAliveTimeout = 120000;
-  server.headersTimeout = 120000;
-}
+app.listen(3000, () => console.log("Server ready on port 3000."));
 
 export default app;

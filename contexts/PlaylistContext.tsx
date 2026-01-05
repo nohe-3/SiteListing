@@ -1,6 +1,8 @@
+
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import type { Playlist } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { usePreference } from './PreferenceContext';
 
 interface PlaylistContextType {
   playlists: Playlist[];
@@ -17,6 +19,7 @@ interface PlaylistContextType {
 const PlaylistContext = createContext<PlaylistContextType | undefined>(undefined);
 
 export const PlaylistProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { notifyAction } = usePreference();
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
     try {
       const item = window.localStorage.getItem('playlists');
@@ -45,16 +48,19 @@ export const PlaylistProvider: React.FC<{ children: ReactNode }> = ({ children }
       authorId: authorId,
     };
     setPlaylists(prev => [newPlaylist, ...prev]);
+    notifyAction();
   };
   
   const renamePlaylist = (playlistId: string, newName: string) => {
     setPlaylists(prev => 
       prev.map(p => (p.id === playlistId ? { ...p, name: newName } : p))
     );
+    notifyAction();
   };
 
   const deletePlaylist = (playlistId: string) => {
     setPlaylists(prev => prev.filter(p => p.id !== playlistId));
+    notifyAction();
   };
   
   const addVideoToPlaylist = (playlistId: string, videoId: string) => {
@@ -65,6 +71,7 @@ export const PlaylistProvider: React.FC<{ children: ReactNode }> = ({ children }
         return p;
       })
     );
+    notifyAction();
   };
 
   const removeVideoFromPlaylist = (playlistId: string, videoId: string) => {
@@ -75,6 +82,7 @@ export const PlaylistProvider: React.FC<{ children: ReactNode }> = ({ children }
         return p;
       })
     );
+    notifyAction();
   };
 
   const reorderVideosInPlaylist = (playlistId: string, startIndex: number, endIndex: number) => {
@@ -87,6 +95,7 @@ export const PlaylistProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
       return p;
     }));
+    notifyAction();
   };
 
   const isVideoInPlaylist = (playlistId: string, videoId: string) => {

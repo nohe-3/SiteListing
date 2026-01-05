@@ -1,7 +1,7 @@
 
-
-import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
 import type { Video } from '../types';
+import { usePreference } from './PreferenceContext';
 
 interface HistoryContextType {
   history: Video[];
@@ -19,27 +19,30 @@ const SHORTS_HISTORY_KEY = 'shortsHistory';
 const MAX_HISTORY_LENGTH = 200;
 
 export const HistoryProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [history, setHistory] = useState<Video[]>(() => {
-    try {
-      const item = window.localStorage.getItem(HISTORY_KEY);
-      return item ? JSON.parse(item) : [];
-    } catch (error) {
-      console.error("Failed to parse history from localStorage", error);
-      return [];
-    }
-  });
+  const { notifyAction, isGuestMode } = usePreference();
+  const isInitialized = useRef(false);
 
-  const [shortsHistory, setShortsHistory] = useState<Video[]>(() => {
-    try {
-      const item = window.localStorage.getItem(SHORTS_HISTORY_KEY);
-      return item ? JSON.parse(item) : [];
-    } catch (error) {
-      console.error("Failed to parse shorts history from localStorage", error);
-      return [];
-    }
-  });
+  const [history, setHistory] = useState<Video[]>([]);
+  const [shortsHistory, setShortsHistory] = useState<Video[]>([]);
 
+  // Initial Read
   useEffect(() => {
+      try {
+          const item = window.localStorage.getItem(HISTORY_KEY);
+          if (item) setHistory(JSON.parse(item));
+          
+          const shortsItem = window.localStorage.getItem(SHORTS_HISTORY_KEY);
+          if (shortsItem) setShortsHistory(JSON.parse(shortsItem));
+      } catch (error) {
+          console.error("Failed to parse history from localStorage", error);
+      } finally {
+          isInitialized.current = true;
+      }
+  }, []);
+
+  // Sync Write
+  useEffect(() => {
+    if (!isInitialized.current) return;
     try {
       window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     } catch (error) {
@@ -48,6 +51,7 @@ export const HistoryProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [history]);
 
   useEffect(() => {
+    if (!isInitialized.current) return;
     try {
       window.localStorage.setItem(SHORTS_HISTORY_KEY, JSON.stringify(shortsHistory));
     } catch (error) {
@@ -56,32 +60,36 @@ export const HistoryProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [shortsHistory]);
 
   const addVideoToHistory = useCallback((video: Video) => {
+    if (isGuestMode) return; 
+
     setHistory(prev => {
-      // 既存の履歴から同じIDの動画を削除し、新しい動画を先頭に追加する
       const newHistory = [video, ...prev.filter(v => v.id !== video.id)];
-      // 最大履歴長を超えないように切り詰める
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
-  }, []);
+    notifyAction();
+  }, [notifyAction, isGuestMode]);
 
   const addShortToHistory = useCallback((video: Video) => {
+    if (isGuestMode) return;
+
     setShortsHistory(prev => {
-      // 既存の履歴から同じIDの動画を削除し、新しい動画を先頭に追加する
       const newHistory = [video, ...prev.filter(v => v.id !== video.id)];
-      // 最大履歴長を超えないように切り詰める
       return newHistory.slice(0, MAX_HISTORY_LENGTH);
     });
-  }, []);
+    notifyAction();
+  }, [notifyAction, isGuestMode]);
 
   const clearHistory = useCallback(() => {
     setHistory([]);
     setShortsHistory([]);
-  }, []);
+    notifyAction();
+  }, [notifyAction]);
 
   const removeVideosFromHistory = useCallback((videoIds: string[]) => {
     setHistory(prev => prev.filter(video => !videoIds.includes(video.id)));
     setShortsHistory(prev => prev.filter(video => !videoIds.includes(video.id)));
-  }, []);
+    notifyAction();
+  }, [notifyAction]);
 
   return (
     <HistoryContext.Provider value={{ history, shortsHistory, addVideoToHistory, addShortToHistory, clearHistory, removeVideosFromHistory }}>

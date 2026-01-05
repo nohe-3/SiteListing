@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, memo } from 'react';
 // FIX: Use named import for Link from react-router-dom
 import { Link } from 'react-router-dom';
@@ -90,14 +91,14 @@ const VideoCard: React.FC<VideoCardProps> = memo(({ video, hideChannelInfo = fal
 
   return (
     <div className="flex flex-col group cursor-pointer relative">
-      <Link to={`/watch/${video.id}`}>
-        <div className="relative rounded-xl overflow-hidden aspect-video bg-yt-light dark:bg-yt-dark-gray shadow-sm group-hover:shadow-xl transition-shadow duration-300">
+      <Link to={`/watch/${video.id}`} state={{ video }}>
+        <div className="relative rounded-xl overflow-hidden aspect-video bg-[#f0f0f0] dark:bg-[#202020]">
             <img 
                 src={video.thumbnailUrl} 
                 alt={video.title} 
                 loading="lazy"
                 decoding="async"
-                className="w-full h-full object-cover" 
+                className="w-full h-full object-cover group-hover:rounded-none transition-all duration-200" 
             />
             {video.duration && (
                 <span className="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-xs font-medium px-1.5 py-0.5 rounded-[4px]">
@@ -116,12 +117,12 @@ const VideoCard: React.FC<VideoCardProps> = memo(({ video, hideChannelInfo = fal
           </div>
         )}
         <div className="flex-1 min-w-0 relative">
-          <Link to={`/watch/${video.id}`}>
-            <h3 className="text-black dark:text-white text-base font-semibold leading-snug line-clamp-2 mb-1">
+          <Link to={`/watch/${video.id}`} state={{ video }}>
+            <h3 className="text-[#0f0f0f] dark:text-[#f1f1f1] text-base font-semibold leading-snug line-clamp-2 mb-1">
                 {video.title}
             </h3>
           </Link>
-          <div className="text-yt-light-gray text-sm">
+          <div className="text-[#606060] dark:text-[#aaaaaa] text-sm">
             {!hideChannelInfo && video.channelId && (
                 <div className="relative">
                     {hasCollaborators ? (
@@ -137,8 +138,8 @@ const VideoCard: React.FC<VideoCardProps> = memo(({ video, hideChannelInfo = fal
                                 </div>
                             </div>
                             {isMenuOpen && (
-                                <div ref={menuRef} className="absolute top-full left-0 mt-1 w-48 bg-yt-white dark:bg-yt-light-black rounded-lg shadow-xl border border-yt-spec-light-20 dark:border-yt-spec-20 z-50 overflow-hidden">
-                                    <div className="px-3 py-2 text-xs font-bold text-yt-light-gray border-b border-yt-spec-light-20 dark:border-yt-spec-20">
+                                <div ref={menuRef} className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-[#282828] rounded-lg shadow-xl border border-transparent dark:border-white/10 z-50 overflow-hidden">
+                                    <div className="px-3 py-2 text-xs font-bold text-[#606060] dark:text-[#aaa] border-b border-gray-100 dark:border-white/10">
                                         チャンネルを選択
                                     </div>
                                     <div className="max-h-40 overflow-y-auto">
@@ -146,7 +147,7 @@ const VideoCard: React.FC<VideoCardProps> = memo(({ video, hideChannelInfo = fal
                                             <Link 
                                                 key={collab.id} 
                                                 to={`/channel/${collab.id}`}
-                                                className="flex items-center px-3 py-2 hover:bg-yt-spec-light-10 dark:hover:bg-yt-spec-10"
+                                                className="flex items-center px-3 py-2 hover:bg-gray-100 dark:hover:bg-white/10"
                                                 onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); }}
                                             >
                                                 <img src={collab.avatarUrl} alt={collab.name} loading="lazy" className="w-6 h-6 rounded-full mr-2" />
@@ -174,7 +175,7 @@ const VideoCard: React.FC<VideoCardProps> = memo(({ video, hideChannelInfo = fal
         <button 
             ref={settingsTriggerRef}
             onClick={toggleSettingsMenu}
-            className="absolute top-0 right-[-8px] p-1 transition-opacity rounded-full hover:bg-yt-spec-light-10 dark:hover:bg-yt-spec-10 opacity-0 group-hover:opacity-100"
+            className="absolute top-0 right-[-8px] p-1 transition-opacity rounded-full hover:bg-black/5 dark:hover:bg-white/10 opacity-0 group-hover:opacity-100"
         >
             <div className="transform rotate-90">
                 <MoreIconHorizontal />
@@ -182,17 +183,17 @@ const VideoCard: React.FC<VideoCardProps> = memo(({ video, hideChannelInfo = fal
         </button>
 
         {isSettingsMenuOpen && (
-            <div ref={settingsMenuRef} className="absolute top-6 right-0 w-56 bg-yt-white dark:bg-yt-light-black rounded-lg shadow-xl border border-yt-spec-light-20 dark:border-yt-spec-20 z-50 overflow-hidden">
+            <div ref={settingsMenuRef} className="absolute top-6 right-0 w-56 bg-white dark:bg-[#282828] rounded-lg shadow-xl border border-transparent dark:border-white/10 z-50 overflow-hidden py-2">
                 <button 
                     onClick={handleNotInterested}
-                    className="flex items-center w-full px-4 py-3 hover:bg-yt-spec-light-10 dark:hover:bg-yt-spec-10 text-sm text-black dark:text-white text-left gap-3"
+                    className="flex items-center w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/10 text-sm text-black dark:text-white text-left gap-3"
                 >
-                    <TrashIcon /> {/* Using TrashIcon as a proxy for 'Not Interested' icon */}
+                    <TrashIcon /> 
                     興味なし
                 </button>
                 <button 
                     onClick={handleBlockChannel}
-                    className="flex items-center w-full px-4 py-3 hover:bg-yt-spec-light-10 dark:hover:bg-yt-spec-10 text-sm text-black dark:text-white text-left gap-3"
+                    className="flex items-center w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/10 text-sm text-black dark:text-white text-left gap-3"
                 >
                     <BlockIcon />
                     チャンネルをおすすめに表示しない

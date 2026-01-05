@@ -1,7 +1,4 @@
 
-
-
-
 import type { Video, Channel } from '../types';
 import { searchVideos, getRecommendedVideos, parseDuration } from './api';
 import { extractKeywords, calculateMagnitude, isJapaneseText } from './xrai';
@@ -42,6 +39,14 @@ const isShortVideo = (v: Video): boolean => {
     return (seconds > 0 && seconds <= 60) || v.title.toLowerCase().includes('#shorts');
 };
 
+// Timeout wrapper for individual fetch operations
+const fetchWithTimeout = <T>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallbackValue), ms))
+    ]);
+};
+
 export const getXraiRecommendations = async (sources: RecommendationSource): Promise<HomeFeed> => {
     const { 
         watchHistory, 
@@ -49,11 +54,12 @@ export const getXraiRecommendations = async (sources: RecommendationSource): Pro
         ngKeywords,
         ngChannels,
         hiddenVideos,
-        negativeKeywords
+        negativeKeywords,
+        page
     } = sources;
 
-    const TARGET_VIDEOS = 50;
-    const TRENDING_VIDEO_RATIO = 0.40;
+    const TARGET_VIDEOS = 100;
+    const TRENDING_VIDEO_RATIO = 0.20; // 20% Trending, 80% Personalized
     const TARGET_SHORTS = 20;
 
     const seenIds = new Set<string>(hiddenVideos.map(v => v.id));
@@ -83,21 +89,35 @@ export const getXraiRecommendations = async (sources: RecommendationSource): Pro
     };
 
     // 1. Fetch Personalized Seeds
+    // Increased seed count to ensure we hit the 100 video target
     let personalizedSeeds: string[] = [];
     if (watchHistory.length > 0) {
-        const historySample = shuffleArray(watchHistory).slice(0, 5);
+        const historySample = shuffleArray(watchHistory).slice(0, 7);
         personalizedSeeds = historySample.map(v => `${cleanTitleForSearch(v.title)} related`);
     } else if (subscribedChannels.length > 0) {
-        const subSample = shuffleArray(subscribedChannels).slice(0, 3);
+        const subSample = shuffleArray(subscribedChannels).slice(0, 5);
         personalizedSeeds = subSample.map(c => `${c.name} videos`);
     } else {
-        personalizedSeeds = ["Music", "Gaming", "Vlog"];
+        personalizedSeeds = ["Music", "Gaming", "Vlog", "News", "Technology"];
     }
 
-    // 2. Fetch Content
-    const trendingPromise = getRecommendedVideos().then(res => res.videos).catch(() => []);
+    // Optimization: Only increment backend page every 3 app pages to avoid slowness
+    const queryPage = Math.floor((page - 1) / 3) + 1;
+
+    // 2. Fetch Content with Timeouts for Speed
+    // Increased timeout for deeper pages
+    const trendingPromise = fetchWithTimeout(
+        getRecommendedVideos().then(res => res.videos).catch(() => []),
+        2500, 
+        []
+    );
+    
     const searchPromises = personalizedSeeds.map(query => 
-        searchVideos(query, '1').then(res => ({ videos: res.videos, shorts: res.shorts })).catch(() => ({ videos: [], shorts: [] }))
+        fetchWithTimeout(
+            searchVideos(query, String(queryPage)).then(res => ({ videos: res.videos, shorts: res.shorts })).catch(() => ({ videos: [], shorts: [] })),
+            5000, 
+            { videos: [], shorts: [] }
+        )
     );
     
     const [trendingContent, personalizedResults] = await Promise.all([trendingPromise, Promise.all(searchPromises)]);
@@ -134,10 +154,19 @@ export const getXraiRecommendations = async (sources: RecommendationSource): Pro
     const numTrending = Math.floor(TARGET_VIDEOS * TRENDING_VIDEO_RATIO);
     const numPersonalized = TARGET_VIDEOS - numTrending;
     
-    const finalVideos = shuffleArray([
-        ...shuffleArray(cleanTrendingVideos).slice(0, numTrending),
-        ...shuffleArray(cleanPersonalizedVideos).slice(0, numPersonalized)
-    ]);
+    // Ensure we fill the quota if one source is low
+    const finalTrending = shuffleArray(cleanTrendingVideos).slice(0, numTrending);
+    let finalPersonalized = shuffleArray(cleanPersonalizedVideos);
+    
+    // If trending is short, fill with personalized
+    if (finalTrending.length < numTrending) {
+        // Just use all available trending
+    }
+    
+    // If personalized has enough, take what we need, else take all
+    finalPersonalized = finalPersonalized.slice(0, Math.max(numPersonalized, TARGET_VIDEOS - finalTrending.length));
+
+    const finalVideos = shuffleArray([...finalTrending, ...finalPersonalized]);
 
     // 6. Mix Shorts
     const finalShorts = shuffleArray([
@@ -158,7 +187,8 @@ export const getXraiShorts = async (sources: RecommendationSource & { seenIds?: 
         ngChannels,
         ngKeywords,
         negativeKeywords,
-        seenIds = []
+        seenIds = [],
+        page
     } = sources;
 
     // --- Configuration ---
@@ -183,6 +213,7 @@ export const getXraiShorts = async (sources: RecommendationSource & { seenIds?: 
     const userMag = calculateMagnitude(userVector); 
 
     // --- Candidate Generation (Robust Popularity Sources) ---
+    const queryPage = Math.floor((page - 1) / 3) + 1;
     
     const popularQueries = [
         " #shorts",
@@ -209,14 +240,14 @@ export const getXraiShorts = async (sources: RecommendationSource & { seenIds?: 
     const selectedQueries = shuffleArray(popularQueries).slice(0, 3);
     
     const popularPromise = Promise.all([
-        getRecommendedVideos().then(res => res.videos.filter(isShortVideo)).catch(() => []),
-        ...selectedQueries.map(q => searchVideos(q, '1').then(res => [...res.videos, ...res.shorts].filter(isShortVideo)).catch(() => []))
+        fetchWithTimeout(getRecommendedVideos().then(res => res.videos.filter(isShortVideo)).catch(() => []), 2000, []),
+        ...selectedQueries.map(q => fetchWithTimeout(searchVideos(q, String(queryPage)).then(res => [...res.videos, ...res.shorts].filter(isShortVideo)).catch(() => []), 3000, []))
     ]).then(results => results.flat());
     
     const topKeywords = [...userVector.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
     const personalizedSeeds = topKeywords.length > 0 ? topKeywords.map(k => `${k} #shorts`) : ["音楽 #shorts"];
     const personalizedPromise = Promise.all(personalizedSeeds.map(query => 
-        searchVideos(query, '1').then(res => [...res.videos, ...res.shorts].filter(isShortVideo)).catch(() => [])
+        fetchWithTimeout(searchVideos(query, String(queryPage)).then(res => [...res.videos, ...res.shorts].filter(isShortVideo)).catch(() => []), 3000, [])
     )).then(results => results.flat());
 
     const [popularShortsRaw, personalizedShortsRaw] = await Promise.all([popularPromise, personalizedPromise]);

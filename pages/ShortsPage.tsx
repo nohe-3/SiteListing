@@ -1,11 +1,8 @@
 
-
-
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import ShortsPlayer from '../components/ShortsPlayer';
-import { getPlayerConfig, getComments, parseDuration, getChannelShorts, getVideoDetails } from '../utils/api';
+import { getPlayerConfig, getComments, parseDuration, getVideoDetails, getChannelShorts } from '../utils/api';
 import { getXraiShorts } from '../utils/recommendation';
 import type { Video, Comment } from '../types';
 import { useSubscription } from '../contexts/SubscriptionContext';
@@ -36,7 +33,8 @@ const ShortsPage: React.FC = () => {
     
     const location = useLocation();
     const navigate = useNavigate();
-    const context = location.state?.context as { type: 'channel' | 'home' | 'search', channelId?: string } | undefined;
+    const context = location.state?.context as { type: 'channel' | 'home' | 'search', channelId?: string, sort?: 'latest' | 'popular' } | undefined;
+    const initialVideos = location.state?.initialVideos as Video[] | undefined;
 
     const [videos, setVideos] = useState<Video[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -101,35 +99,40 @@ const ShortsPage: React.FC = () => {
         if (isFetchingMore) return;
         setIsFetchingMore(true);
         try {
-            if (!context || context.type !== 'channel') {
-                const currentSeenIds = Array.from(seenVideoIdsRef.current) as string[];
-                
-                const shorts = await getXraiShorts({ 
-                    searchHistory, watchHistory, shortsHistory, subscribedChannels, 
-                    ngKeywords, ngChannels, hiddenVideos, negativeKeywords, 
-                    page: Math.floor(videos.length / 30) + 1, 
-                    seenIds: currentSeenIds
-                });
-                
-                setVideos(prev => {
-                    const existingIds = new Set(prev.map(v => v.id));
-                    const newUniqueShorts = shorts.filter(s => !existingIds.has(s.id));
-                    newUniqueShorts.forEach(s => seenVideoIdsRef.current.add(s.id));
-                    return [...prev, ...newUniqueShorts];
-                });
+            if (context?.type === 'channel' && context.channelId) {
+                // If in channel mode, simple pagination isn't fully implemented in this quick integration.
+                // We rely on the initial load for now or re-fetching if we had pages.
+                // For this implementation, we just stop at the end of the loaded list to avoid complexity.
+                setIsFetchingMore(false);
+                return; 
             }
+
+            const currentSeenIds = Array.from(seenVideoIdsRef.current) as string[];
+            const shorts = await getXraiShorts({ 
+                searchHistory, watchHistory, shortsHistory, subscribedChannels, 
+                ngKeywords, ngChannels, hiddenVideos, negativeKeywords, 
+                page: Math.floor(videos.length / 30) + 1, 
+                seenIds: currentSeenIds
+            });
+            
+            setVideos(prev => {
+                const existingIds = new Set(prev.map(v => v.id));
+                const newUniqueShorts = shorts.filter(s => !existingIds.has(s.id));
+                newUniqueShorts.forEach(s => seenVideoIdsRef.current.add(s.id));
+                return [...prev, ...newUniqueShorts];
+            });
         } catch (e) {
             console.error(e);
         } finally {
             setIsFetchingMore(false);
         }
-    }, [isFetchingMore, context, videos.length, searchHistory, watchHistory, shortsHistory, subscribedChannels, ngKeywords, ngChannels, hiddenVideos, negativeKeywords]);
+    }, [isFetchingMore, videos.length, searchHistory, watchHistory, shortsHistory, subscribedChannels, ngKeywords, ngChannels, hiddenVideos, negativeKeywords, context]);
 
     // Initial Data Fetch Logic
     useEffect(() => {
         const init = async () => {
             // If we already have videos and the current video is in the list, don't re-init.
-            // This prevents "blue spinner" when App.tsx keeps component alive but logic re-runs.
+            // But if context changed (e.g. going from one channel to another), we might need to check.
             if (videos.length > 0) {
                 if (videoId && videos.some(v => v.id === videoId)) {
                     return;
@@ -143,60 +146,68 @@ const ShortsPage: React.FC = () => {
                 const params = await getPlayerConfig();
                 setPlayerParams(params);
 
-                if (context?.type === 'channel' && context.channelId) {
-                    const { videos: channelShorts } = await getChannelShorts(context.channelId);
-                    
-                    let initialIndex = 0;
-                    if (videoId) {
-                        const idx = channelShorts.findIndex(v => v.id === videoId);
-                        if (idx !== -1) {
-                            initialIndex = idx;
-                        } else {
-                            try {
-                                const detail = await getVideoDetails(videoId);
-                                channelShorts.unshift(detail);
-                                initialIndex = 0;
-                            } catch (e) {
-                                console.warn("Could not fetch detail for initial video", e);
-                            }
-                        }
-                    }
-                    
-                    seenVideoIdsRef.current = new Set(channelShorts.map(v => v.id));
-                    setVideos(channelShorts);
-                    setCurrentIndex(initialIndex);
+                let initialList: Video[] = [];
+
+                // Priority 1: Passed Initial Videos (from Channel Page)
+                if (initialVideos && initialVideos.length > 0) {
+                    initialList = initialVideos;
                 } 
+                // Priority 2: Channel Context but no initial videos (e.g. refresh)
+                else if (context?.type === 'channel' && context.channelId) {
+                    const res = await getChannelShorts(context.channelId, context.sort || 'latest');
+                    initialList = res.videos;
+                }
+                // Priority 3: Recommendation (Default)
                 else {
-                    const shorts = await getXraiShorts({ 
+                    initialList = await getXraiShorts({ 
                         searchHistory, watchHistory, shortsHistory, subscribedChannels, 
                         ngKeywords, ngChannels, hiddenVideos, negativeKeywords, 
                         page: 1,
                         seenIds: []
                     });
+                }
 
-                    let initialList = shorts;
-                    if (videoId) {
-                        const existingIdx = shorts.findIndex(v => v.id === videoId);
-                        if (existingIdx !== -1) {
-                            const [target] = shorts.splice(existingIdx, 1);
-                            initialList = [target, ...shorts];
-                        } else {
-                            try {
-                                const detail = await getVideoDetails(videoId);
-                                initialList = [detail, ...shorts];
-                            } catch (e) {
-                                console.warn("Could not fetch detail for requested video", e);
+                // If a specific videoId was requested but not in the fetched list (e.g. deep link)
+                // fetch it individually and prepend/insert it.
+                if (videoId) {
+                    const existingIdx = initialList.findIndex(v => v.id === videoId);
+                    if (existingIdx !== -1) {
+                        // Found in list, move to start if it's XRAI, but for Channel Context keep order?
+                        // If channel context, we want to keep the list order so "Next" works logically.
+                        // We just set current index to it later.
+                    } else {
+                        // Not in list, fetch detail
+                        try {
+                            const detail = await getVideoDetails(videoId);
+                            if (context?.type === 'channel') {
+                                // If channel context, we ideally want to find where this video belongs, 
+                                // but without scanning all pages, we just put it at start or end.
+                                // Putting at start allows playing it, but "Next" might jump to "Latest".
+                                // Acceptable compromise for direct link.
+                                initialList = [detail, ...initialList];
+                            } else {
+                                initialList = [detail, ...initialList];
                             }
+                        } catch (e) {
+                            console.warn("Could not fetch detail for requested video", e);
                         }
                     }
-                    
-                    if (initialList.length === 0) setError("ショート動画が見つかりませんでした。");
-                    else {
-                        seenVideoIdsRef.current = new Set(initialList.map(v => v.id));
-                        setVideos(initialList);
-                    }
-                    setCurrentIndex(0);
                 }
+                
+                if (initialList.length === 0) setError("ショート動画が見つかりませんでした。");
+                else {
+                    seenVideoIdsRef.current = new Set(initialList.map(v => v.id));
+                    setVideos(initialList);
+                    
+                    // Set index
+                    if (videoId) {
+                        const idx = initialList.findIndex(v => v.id === videoId);
+                        setCurrentIndex(idx !== -1 ? idx : 0);
+                    } else {
+                        setCurrentIndex(0);
+                    }
+                }
+                
             } catch (err: any) {
                 setError(err.message || 'ショート動画の読み込みに失敗しました。');
                 console.error(err);
@@ -205,29 +216,32 @@ const ShortsPage: React.FC = () => {
             }
         };
 
-        // Only run init if we strictly need to (empty list or new context)
+        // Only run init if we strictly need to (empty list or force reload needed)
+        // If we have videos, checking if they match context is complex, so we rely on key/mount or manual check.
+        // For now, if videos is empty, we init.
         if (videos.length === 0) {
             init();
         }
-    }, [videoId, context]); // Keep dependency minimal to avoid loops
+    }, [videoId, initialVideos, context]); 
 
     // --- Pre-fetching Logic ---
     useEffect(() => {
-        if (videos.length > 0 && context?.type !== 'channel') {
+        if (videos.length > 0) {
             const remainingVideos = videos.length - 1 - currentIndex;
             // Buffer: 15 items
             if (remainingVideos < 15 && !isFetchingMore && !isLoading) {
                 fetchMoreShorts();
             }
         }
-    }, [currentIndex, videos.length, isFetchingMore, isLoading, context, fetchMoreShorts]);
+    }, [currentIndex, videos.length, isFetchingMore, isLoading, fetchMoreShorts]);
 
     // Update URL on Swipe/Navigation
     useEffect(() => {
         if (videos[currentIndex] && videos[currentIndex].id !== videoId) {
-            navigate(`/shorts/${videos[currentIndex].id}`, { replace: true, state: location.state });
+            // Keep state to preserve context when navigating
+            navigate(`/shorts/${videos[currentIndex].id}`, { replace: true, state: { context, initialVideos } });
         }
-    }, [currentIndex, videos, navigate, videoId, location.state]);
+    }, [currentIndex, videos, navigate, videoId, context, initialVideos]);
 
     const handleNext = useCallback(() => {
         const nextIndex = currentIndex + 1;
@@ -291,7 +305,7 @@ const ShortsPage: React.FC = () => {
             setAreCommentsLoading(true);
             try {
                 const data = await getComments(videos[currentIndex].id);
-                setComments(data);
+                setComments(data.comments);
             } catch (e) { console.error("Failed to fetch comments", e); } 
             finally { setAreCommentsLoading(false); }
         }

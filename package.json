@@ -4,11 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node api/index.js & vite --host 0.0.0.0 --port 5000",
+    "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "start": "node api/index.js",
-    "postinstall": "curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o ./yt-dlp_linux && chmod +x ./yt-dlp_linux || true"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.46",
@@ -19,12 +17,10 @@
     "react-dom": "^19.1.1",
     "react-router-dom": "^6.25.1",
     "uuid": "^13.0.0",
-    "youtubei.js": "^9.0.0"
+    "youtubei.js": "^12.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
     "@vercel/node": "^3.2.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
